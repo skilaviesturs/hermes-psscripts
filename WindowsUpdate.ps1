@@ -518,8 +518,6 @@ BEGIN {
 		Zemāk veicam izmaiņas, ja patiešām saprotam, ko darām.
 	--------------------------------------------------------------------------------------------------------- #>
 	#Skripta tehniskie mainīgie
-	if ((Get-Module).name -eq "WindowsUpdate"){Remove-Module -Name WindowsUpdate}
-	Import-Module -Name ".\WindowsUpdate.psm1"
 	$CurVersion = "3.0.1"
 	$scriptWatch	= [System.Diagnostics.Stopwatch]::startNew()
 	#Skritpa konfigurācijas datnes
@@ -527,16 +525,24 @@ BEGIN {
 	$__ScriptPath	= Split-Path (Get-Variable MyInvocation -Scope Script).Value.Mycommand.Definition -Parent
 	#Atskaitēm un datu uzkrāšanai
 	$ReportPath = "$__ScriptPath\result"
-	$DataDir = "$__ScriptPath\data"
+	$Script:DataDir = "$__ScriptPath\data"
 	$BackupDir = "$__ScriptPath\data\backup"
+	$ModuleDir = "$__ScriptPath\modules"
+	$LogFileDir = "$__ScriptPath\log"
+	# ielādējam moduļus
+	Get-PSSession | Remove-PSSession
+	if ((Get-Module).name -eq "ScriptHelpers"){Remove-Module -Name ScriptHelpers}
+	Import-Module -Name "$ModuleDir\ScriptHelpers.psm1"
+	if ((Get-Module).name -eq "WindowsUpdate"){Remove-Module -Name WindowsUpdate}
+	Import-Module -Name ".\WindowsUpdate.psm1"
 	#Helper scriptu bibliotēkas
-	$CompUpdateFileName = "lib\Set-CompUpdate.ps1"
-	$CompProgramFileName = "lib\Set-CompProgram.ps1"
-	$CompAssetFileName = "lib\Get-CompAsset.ps1"
-	$CompSoftwareFileName	= "lib\Get-CompSoftware.ps1"
-	$CompEventsFileName = "lib\Get-CompEvents.ps1"
-	$CompTestOnlineFileName	= "lib\Get-CompTestOnline.ps1"
-	$CompWakeOnLanFileName	= "lib\Invoke-CompWakeOnLan.ps1"
+	$CompUpdateFileName = "modules\Set-CompUpdate.ps1"
+	$CompProgramFileName = "modules\Set-CompProgram.ps1"
+	$CompAssetFileName = "modules\Get-CompAsset.ps1"
+	$CompSoftwareFileName	= "modules\Get-CompSoftware.ps1"
+	$CompEventsFileName = "modules\Get-CompEvents.ps1"
+	$CompTestOnlineFileName	= "modules\Get-CompTestOnline.ps1"
+	$CompWakeOnLanFileName	= "modules\Invoke-CompWakeOnLan.ps1"
 	$WinUpdFile = "$__ScriptPath\$CompUpdateFileName"
 	$CompProgramFile = "$__ScriptPath\$CompProgramFileName"
 	$CompAssetFile	= "$__ScriptPath\$CompAssetFileName"
@@ -546,428 +552,28 @@ BEGIN {
 	$CompWakeOnLanFile	= "$__ScriptPath\$CompWakeOnLanFileName"
 	#Žurnalēšanai
 	$PSDefaultParameterValues['out-file:width'] = 500
-	$LogFileDir = "$__ScriptPath\log"
-	$LogFile = "$LogFileDir\RemoteJob_$(Get-Date -Format "yyyyMMdd")"
+	$Script:LogFile = "$LogFileDir\$__ScriptName-$(Get-Date -Format "yyyyMMdd")"
 	#$XLStoFile		= "$ReportPath\Report-$(Get-Date -Format "yyyyMMddHHmmss").xls"
-	$OutputToFile	= "$ReportPath\Report-$(Get-Date -Format "yyyyMMdd").txt"
+	$OutputToFile	= "$ReportPath\$__ScriptName-$(Get-Date -Format "yyyyMMdd").txt"
 	$TraceFile = "C:\ExpoSheduledWUjob.log"
-	$DataArchiveFile = "$DataDir\DataArchive.dat"
-	$VerifyCompsResultFile = "$DataDir\VerifyCompsResult.dat"
+	$DataArchiveFile = "$($Script:DataDir)\DataArchive.dat"
 	#$ComputerName = ( -not [string]::IsNullOrEmpty($Name) )
 	$ScriptRandomID	= Get-Random -Minimum 100000 -Maximum 999999
 	$ScriptUser = Invoke-Command -ScriptBlock { whoami }
 	$RemoteComputers = @()
-	$MaxJobsThreads	= 40
+	$Script:MaxJobsThreads	= 40
 
-	Get-PSSession | Remove-PSSession
+
 	if ( -not ( Test-Path -Path $LogFileDir ) ) { $null = New-Item -ItemType "Directory" -Path $LogFileDir }
 	if ( -not ( Test-Path -Path $ReportPath ) ) { $null = New-Item -ItemType "Directory" -Path $ReportPath }
-	if ( -not ( Test-Path -Path $DataDir ) ) { $null = New-Item -ItemType "Directory" -Path $DataDir }
+	if ( -not ( Test-Path -Path $Script:DataDir ) ) { $null = New-Item -ItemType "Directory" -Path $Script:DataDir }
 	if ( -not ( Test-Path -Path $BackupDir ) ) { $null = New-Item -ItemType "Directory" -Path $BackupDir }
+	
 
 	if ($Help) {
-		Write-Host "`nVersion:[$CurVersion]`n"
-		#$text = (Get-Command "$__ScriptPath\$__ScriptName" ).ParameterSets | Select-Object -Property @{n = 'Parameters'; e = { $_.ToString() } }
-		$text = Get-Command -Name "$__ScriptPath\$__ScriptName" -Syntax
-		$text | ForEach-Object { Write-Host $($_) }
-		Write-Host "For more info write `'Get-Help `.`\$__ScriptName -Examples`'"
+		Get-ScriptHelp -Version $CurVersion -ScriptPath "$__ScriptPath\$__ScriptName"
 		Exit
 	}#endif
-
-	Function Write-msg { 
-		Param(
-			[Parameter(Mandatory = $true)]
-			[ValidateNotNullOrEmpty()]
-			[string]$text,
-			[switch]$log,
-			[switch]$bug
-		) #param
-
-		try {
-			#write-debug "[wrlog] Log path: $log"
-			if ( $bug ) { $flag = 'ERROR' } else { $flag = 'INFO' }
-			$timeStamp = Get-Date -Format "yyyy.MM.dd HH:mm:ss"
-			if ( $log -and $bug ) {
-				Write-Warning "[$flag] $text"	
-				Write-Output "$timeStamp [$ScriptRandomID] [$ScriptUser] [$flag] $text" | Out-File "$LogFile.log" -Append -ErrorAction Stop
-			}#endif
-			elseif ( $log ) {
-				Write-Verbose "[$flag] $text"
-				Write-Output "$timeStamp [$ScriptRandomID] [$ScriptUser] [$flag] $text" | Out-File "$LogFile.log" -Append -ErrorAction Stop
-			}#endif
-			else {
-				Write-Verbose "$flag [$ScriptRandomID] $text"
-			} #else
-		}#endtry
-		catch {
-			Write-Warning "[Write-msg] $($_.Exception.Message)"
-			return
-		}#endOftry
-	}#endOffunction
-
-	Function Write-ErrorMsg {
-		[CmdletBinding()]
-		Param(
-			[Parameter(Mandatory = $true)]
-			[ValidateNotNullOrEmpty()]
-			[object]$InputObject,
-			[Parameter(Mandatory = $true)]
-			[ValidateNotNullOrEmpty()]
-			[string]$Name
-		)#param
-		Write-msg -log -bug -text "[$name] Error: $($InputObject.Exception.Message)"
-		$string_err = $InputObject | Out-String
-		Write-msg -log -bug -text "$string_err"
-	}#endOffunction
-
-	Function Get-ScriptFileUpdate {
-		Param(
-			[Parameter(Position = 0, Mandatory = $true)]
-			[ValidateNotNullOrEmpty()]
-			[String]$FileName,
-			[Parameter(Position = 1, Mandatory = $true)]
-			[ValidateNotNullOrEmpty()]
-			[String]$ScriptPath,
-			[Parameter(Position = 2, Mandatory = $true)]
-			[ValidateNotNullOrEmpty()]
-			[String]$UpdatePath
-		)
-		try { $NewFile = Get-ChildItem "$UpdatePath\$FileName" -ErrorAction Stop } catch {}
-		try { $ScriptFile = Get-ChildItem "$ScriptPath\$FileName"  -ErrorAction Stop } catch {}
-		if ( $NewFile.count -gt 0 ) {
-			if ( $NewFile.LastWriteTime -gt $ScriptFile.LastWriteTime ) {
-				Write-msg -log -text "[ScriptUpdate] Found update for script [$FileName]"
-				Write-msg -log -text "[ScriptUpdate] Old version [$($ScriptFile.LastWriteTime)], [$($ScriptFile.FullName)]"
-				Write-msg -log -text "[ScriptUpdate] New version [$($NewFile.LastWriteTime)], [$($NewFile.FullName)]"
-				try {
-					Copy-Item -Path $NewFile.FullName -Destination "$(Split-Path -Path "$ScriptPath\$FileName")" -Force -ErrorAction Stop
-					Write-msg -log -text "[ScriptUpdate] New version deployed."
-				}#endtry
-				catch {
-					#Write-msg -log -bug -text "[ScriptUpdate] [$FileName] $($_.Exception.Message)"
-					Write-ErrorMsg -Name 'ScriptUpdate' -InputObject $_
-				}#endcatch
-			}#endif
-		}#endif
-
-	}#endOffunction
-
-	Function Get-NormaliseDiskLabelsForExcel {
-		Param(
-			[Parameter(Position = 0, Mandatory = $true)]
-			[ValidateNotNullOrEmpty()]
-			[System.Object]$Computers
-		)
-		$TemplateDisks = [PSCustomObject][ordered]@{}
-		#Get uniqe disk label's collection from computers and write in array
-		foreach ($computer in $computers) {
-			foreach ( $Item in $computer.PsObject.Properties ) {
-				if ( $Item.Name -match '^hDisk\s[a-zA-Z]:\ssize' ) {
-					if ( -not ( Get-Member -InputObject $TemplateDisks -Name $Item.Name ) ) {
-						$TemplateDisks | Add-Member -MemberType NoteProperty -Name $Item.Name -Value 'none'
-					}#endif
-				}#endif
-				if ( $Item.Name -match '^hDisk\s[a-zA-Z]:\ssize\sFree' ) {
-					if ( -not ( Get-Member -InputObject $TemplateDisks -Name $Item.Name ) ) {
-						$TemplateDisks | Add-Member -MemberType NoteProperty -Name $Item.Name -Value 'none'
-					}#endif
-				}#endif
-			}#endforeach
-		}#endforeach
-		#Add to each computer's properties missing disk label
-		foreach ( $computer in $computers ) {
-			foreach ($label in $TemplateDisks.PsObject.Properties) {
-				if ( -not ( Get-Member -InputObject $computer -Name $label.Name ) ) {
-					Add-Member -InputObject $computer -NotePropertyName $label.Name -NotePropertyValue 'none' -Force
-				}#endif
-			}#endforeach
-		}#endforeach
-		return $computers
-	}#endOffunction
-
-	Function Set-Jobs {
-		Param(
-			[Parameter(Position = 0, Mandatory = $true)]
-			[string[]]$Computers,
-			[Parameter(Position = 1, Mandatory = $true)]
-			[string]$ScriptBlockName,
-			[Parameter(Position = 2, Mandatory = $false)]
-			[string]$Argument1
-		)
-		<# ---------------------------------------------------------------------------------------------------------
-		#	Definējam komandu blokus:
-		#	SBVerifyComps : pārbaudam datora gatavību darbam ar skriptu
-		--------------------------------------------------------------------------------------------------------- #>
-		$SBVerifyComps = {
-			try {
-				$Computer = $args[0]
-				#Write-host "[Comp,block1] $Computer"
-				If ( Test-Connection -ComputerName $Computer -Count 1 -Quiet -ErrorAction Stop ) {
-					$isPingTest = $True
-					$RemSess = New-PSSession -ComputerName $Computer -ErrorAction Stop
-					if ( ( Invoke-Command -Session $RemSess -ScriptBlock { $PSVersionTable.PSVersion.Major } ) -ge 5 ) { $isPSversion = $True }
-			
-					#check module 'PSWindowsUpdate' is installed, if not, copy from script's root directory to remote computer
-					if (-not ( Invoke-Command -Session $RemSess -ScriptBlock { Get-Module -ListAvailable -Name 'PSWindowsUpdate' } )) {
-						Copy-Item "lib\modules\PSWindowsUpdate\" -Destination "C:\Program Files\WindowsPowerShell\Modules\" -ToSession $RemSess -Recurse -ErrorAction Stop
-						$msgPSWUModuleInf = "PSWindowsUpdate module installed on [$computer]."
-						$isPSWUModule = $True
-					}#endif
-					else {
-						$isPSWUModule = $True
-					}#endelse
-					if (-not ( Invoke-Command -Session $RemSess -ScriptBlock { Get-Module -ListAvailable -Name 'Join-Object' } )) {
-						Copy-Item "lib\modules\Join-Object\" -Destination "C:\Program Files\WindowsPowerShell\Modules\" -ToSession $RemSess -Recurse -ErrorAction Stop
-						$msgJoinObjectInf = "Join-Object module installed on [$computer]."
-						$isJoinObject = $True
-					}#endif
-					else {
-						$isJoinObject = $True
-					}#endelse
-					#cheking computer is set ExecutionPolicy = RemoteSigned and LanguageMode = FullLanguage
-					$psLanguage = Invoke-Command -Session $RemSess -ScriptBlock { $ExecutionContext.SessionState.LanguageMode }
-					if ( $psLanguage.value -notlike 'FullLanguage' ) {
-						$msgLanguageBug = "Computer [$Computer] is not ready for PSRemote: LanguageMode is set [$($psLanguage.value)]"
-					}#endif
-					else {
-						$isLanguage = $True
-					}#endelse
-					$policy = Invoke-Command -Session $RemSess -ScriptBlock { Get-ExecutionPolicy }
-					if ( $policy.value -notlike 'Unrestricted' -and $policy.value -notlike 'RemoteSigned' ) {
-						$msgPolicyBug = "Computer [$Computer] is not ready for PSRemote: policy is set [$($policy.value)]"
-					}#endif
-					else {
-						$isPolicy = $True
-					}#endelse
-					if ( $RemSess.count -gt 0 ) {
-						Remove-PSSession -Session $RemSess
-					}#endif
-				}#endif
-				else {
-					$msgCatchErr = "Computer [$Computer] is not accessible."
-				}#endelse
-				$ObjectReturn = New-Object -TypeName psobject -Property @{
-					Computer         = $Computer ;
-					isPingTest       = if ( $isPingTest ) { $isPingTest } else { $False } ;
-					isPSversion      = if ( $isPSversion ) { $isPSversion } else { $False } ;
-					isPSWUModule     = if ( $isPSWUModule ) { $isPSWUModule } else { $False } ;
-					msgPSWUModuleInf	= if ( $msgPSWUModuleInf ) { $isPSWUModule } else { $null } ;
-					isJoinObject     = if ( $isJoinObject ) { $isJoinObject } else { $False } ;
-					msgJoinObjectInf	= if ( $msgJoinObjectInf ) { $msgJoinObjectInf } else { $null } ;
-					isLanguage       = if ( $isLanguage ) { $isLanguage } else { $False } ;
-					msgLanguageBug   = if ( $msgLanguageBug ) { $msgLanguageBug } else { $null } ;
-					isPolicy         = if ( $isPolicy ) { $isPolicy } else { $False } ;
-					msgPolicyBug     = if ( $msgPolicyBug ) { $msgPolicyBug } else { $null } ;
-					msgCatchErr      = if ( $msgCatchErr ) { $msgCatchErr } else { $null } ;
-				}#endobject
-				return $ObjectReturn
-			}#endtry
-			catch {
-				$msgCatchErr = "$_"
-				$ObjectReturn = New-Object -TypeName psobject -Property @{
-					Computer         = $Computer ;
-					isPingTest       = if ( $isPingTest ) { $isPingTest } else { $False } ;
-					isPSversion      = if ( $isPSversion ) { $isPSversion } else { $False } ;
-					isPSWUModule     = if ( $isPSWUModule ) { $isPSWUModule } else { $False } ;
-					msgPSWUModuleInf	= if ( $msgPSWUModuleInf ) { $isPSWUModule } else { $null } ;
-					isJoinObject     = if ( $isJoinObject ) { $isJoinObject } else { $False } ;
-					msgJoinObjectInf	= if ( $msgJoinObjectInf ) { $msgJoinObjectInf } else { $null } ;
-					isLanguage       = if ( $isLanguage ) { $isLanguage } else { $False } ;
-					msgLanguageBug   = if ( $msgLanguageBug ) { $msgLanguageBug } else { $null } ;
-					isPolicy         = if ( $isPolicy ) { $isPolicy } else { $False } ;
-					msgPolicyBug     = if ( $msgPolicyBug ) { $msgPolicyBug } else { $null } ;
-					msgCatchErr      = if ( $msgCatchErr ) { $msgCatchErr } else { $null } ;
-				}#endobject
-				if ( $RemSess.count -gt 0 ) {
-					Remove-PSSession -Session $RemSess
-				}#endif
-				return $ObjectReturn
-			}#endcatch
-		}#endblock
-
-		<# ---------------------------------------------------------------------------------------------------------
-		# SBWindowsUpdate: izsaucam Windows update uz attālinātās darbstacijas
-		---------------------------------------------------------------------------------------------------------#>
-		$SBWindowsUpdate = {
-			$Computer = $args[0]
-			$WinUpdFile = $args[1]
-			$Update = $args[2]
-			$AutoReboot = $args[3]
-			$OutputResults = Invoke-Command -ComputerName $Computer -FilePath $WinUpdFile -ArgumentList ($Update, $AutoReboot)
-			return $OutputResults
-		}#endblock
-
-		<# ---------------------------------------------------------------------------------------------------------
-		# SBInstall: izsaucam programmas uzstādīšanas procesu
-		# Set-CompProgram.ps1 [-ComputerName] <string> [-InstallPath <FileInfo>] [<CommonParameters>]
-		---------------------------------------------------------------------------------------------------------#>
-		$SBInstall = {
-			$Computer = $args[0]
-			$CompProgramFile = $args[1]
-			$Install = $args[2]
-			$OutputResults = Invoke-Expression "& `"$CompProgramFile`" `-ComputerName $Computer `-InstallPath $Install "
-			return $OutputResults
-		}#endblock
-
-		<# ---------------------------------------------------------------------------------------------------------
-		# SBInstall: izsaucam programmas noņemšanas procesu
-		# Set-CompProgram.ps1 [-ComputerName] <string> [-CryptedIdNumber <string>] [<CommonParameters>]
-		---------------------------------------------------------------------------------------------------------#>
-		$SBUninstall = {
-			$Computer = $args[0]
-			$CompProgramFile = $args[1]
-			$EncryptedParameter = $args[2]
-			$OutputResults = Invoke-Expression "& `"$CompProgramFile`" `-ComputerName $Computer `-CryptedIdNumber $EncryptedParameter "
-			return $OutputResults
-		}#endblock
-
-		<# ---------------------------------------------------------------------------------------------------------
-		# SBWakeOnLan: izsaucam programmas noņemšanas procesu
-		# Invoke-CompWakeOnLan.ps1 [-ComputerName] <string[]> [-DataArchiveFile] <FileInfo> [-CompTestOnline] <FileInfo> [<CommonParameters>]
-		---------------------------------------------------------------------------------------------------------#>
-		$SBWakeOnLan = {
-			$Computer = $args[0]
-			$CompWakeOnLanFile = $args[1]
-			$DataArchiveFile = $args[2]
-			$CompTestOnlineFile = $args[3]
-			$OutputResults = Invoke-Expression "& `"$CompWakeOnLanFile`" `-ComputerName $Computer `-DataArchiveFile `"$DataArchiveFile`" `-CompTestOnline `"$CompTestOnlineFile`" "
-			return $OutputResults
-		}#endblock
-		<# ---------------------------------------------------------------------------------------------------------
-			[JOBers] kods
-		--------------------------------------------------------------------------------------------------------- #>
-		$jobWatch = [System.Diagnostics.Stopwatch]::startNew()
-		$Output = @()
-		Write-Host -NoNewLine "Running jobs : " -ForegroundColor Yellow -BackgroundColor Black
-		ForEach ( $Computer in $Computers ) {
-			While ($(Get-Job -state running).count -ge $MaxJobsThreads) {
-				Start-Sleep -Milliseconds 10
-			}#endWhile
-			if ( $ScriptBlockName -eq 'SBVerifyComps' ) { 
-				$null = Start-Job -Name "$($Computer)" -Scriptblock $SBVerifyComps -ArgumentList $Computer 
-			}#endif
-			if ( $ScriptBlockName -eq 'SBWindowsUpdate' ) { 
-				$null = Start-Job -Name "$($Computer)" -Scriptblock $SBWindowsUpdate -ArgumentList $Computer, $WinUpdFile, $Update, $AutoReboot 
-			}#endif
-			if ( $ScriptBlockName -eq 'SBInstall' ) { 
-				Write-Verbose "[StartJob] Start-Job -Scriptblock $SBInstall -ArgumentList $Computer, $CompProgramFile, $Install"
-				$null = Start-Job -Scriptblock $SBInstall -ArgumentList $Computer, $CompProgramFile, $Install
-			}#endif
-			if ( $ScriptBlockName -eq 'SBUninstall' ) { 
-				Write-Verbose "[StartJob] Start-Job -Scriptblock $SBUninstall -ArgumentList $Computer, $CompProgramFile, $Argument1"
-				$null = Start-Job -Scriptblock $SBUninstall -ArgumentList $Computer, $CompProgramFile, $Argument1
-			}#endif
-			if ( $ScriptBlockName -eq 'SBWakeOnLan' ) { 
-				Write-Verbose "[StartJob] Start-Job -Scriptblock $SBWakeOnLan -ArgumentList $Computer, $CompWakeOnLanFile, $DataArchiveFile, $CompTestOnlineFile"
-				$null = Start-Job -Scriptblock $SBWakeOnLan -ArgumentList $Computer, $CompWakeOnLanFile, $DataArchiveFile, $CompTestOnlineFile
-			}#endif
-			Write-Host -NoNewLine "." -ForegroundColor Yellow -BackgroundColor Black
-		}#endForEach
-		While (Get-Job -State "Running") {
-			Write-Host -NoNewLine "." -ForegroundColor Yellow -BackgroundColor Black
-			Start-Sleep 10
-		}
-		#Get information from each job.
-		foreach ( $job in Get-Job ) {
-			$result = @()
-			$result = Receive-Job -Id ($job.Id)
-			if ( $result -or $result.count -gt 0 ) {
-				$Output += $result
-			}#endif
-		}#endforeach
-		Stop-Watch -Timer $jobWatch -Name JOBers
-		Get-Job | Remove-Job
-
-		if ( $Output.Count -gt 0 ) {
-			Return $Output
-		}#endif
-		else {
-			Return $False
-		}#endelse
-	}#endOfFunction
-
-	Function Get-VerifyComputers {
-		Param(
-			[Parameter(Position = 0, Mandatory = $true)]
-			[string[]]$ComputerNames
-		)
-		Write-Host "[VerifyComp] got for testing [$($ComputerNames.Count)] $(if($ComputerNames.Count -eq 1){"computer"}else{"computers"})"
-		Write-Verbose "[Function:VerifyComputers]:got:[$($ComputerNames)]"
-		$JobResults = Set-Jobs -Computers $ComputerNames -ScriptBlockName 'SBVerifyComps'
-		#$JobResults
-		$JobResults = $JobResults | Where-Object -Property Computer -ne $null
-		if ( $JobResults -ne $False -or $JobResults -notlike 'False' -or $JobResults.Count -gt 0 ) {
-			#Analizējam no job saņemtos rezultātus
-			$DelComps = @()
-			#Analizējam JObbu atgrieztos rezultātus, ievietojam DelComps
-			$JobResults | Foreach-Object {
-				if ( -not $_.CatchErr ) {
-					if ($_.isPingTest -eq $False ) {
-						$DelComps += $_.Computer
-						Write-msg -log -text "[JobResults] computer [$($_.Computer)] is not accessible"
-					}#endif
-					else {
-						if ($_.isPSversion -eq $False ) { 
-							$DelComps += $_.Computer
-							Write-msg -log -text "[JobResults] [$($_.Computer)] Powershell version is less than 5.0"
-							Write-Verbose "[JobResults] [$($_.Computer)] $($_.msgCatchErr)"
-						}#endif
-						elseif ($_.isPSWUModule -eq $False ) { 
-							$DelComps += $_.Computer
-							Write-msg -log -text "[JobResults] $($_.msgPSWUModuleInf)"
-						}#endif
-						elseif ($_.isJoinObject -eq $False ) {
-							$DelComps += $_.Computer 
-							Write-msg -log -text "[JobResults] $($_.msgJoinObjectInf)"
-						}#endif
-						elseif ($_.isLanguage -eq $False ) {
-							$DelComps += $_.Computer 
-							Write-msg -log -bug -text "[JobResults] $($_.msgLanguageBug)"
-						}#endif
-						elseif ($_.isPolicy -eq $False ) {
-							$DelComps += $_.Computer 
-							Write-msg -log -bug -text "[JobResults] $($_.msgPolicyBug)"
-						}#endif
-					}#endelse
-				}#endif
-				else {
-					Write-Host "[JobResults] $($_.CatchErr)"
-					Write-msg -log -bug -text "[JobResults] $($_.CatchErr)" 
-				}#endelse
-			}#endforeach
-			#Atbrīvojamies no dublikātiem, ja tādu ir
-			$DelComps = $DelComps | Get-Unique
-			#Parsējam imput masīvu un papildinām DelComps ar dzēšamajiem datoriem, kas nav atbildējuši uz ping
-			$ComputerNames | ForEach-Object {
-				if ( $JobResults.Computer.Contains($_) -eq $False ) {
-					$DelComps += $_
-				}#endif
-			}#endforeach
-			#Aizvācam no input masīva visus datorus, kas nav izturējuši pārbaudi
-			$DelComps | ForEach-Object { 
-				if ( $ComputerNames.Contains($_) ) {
-					$ComputerNames = $ComputerNames -ne $_
-					Write-msg -log -text "[VerifyComputers] Computer [$_] is not ready PSRemote. Removed."
-				}#endif
-			}#endforeach
-		}#endif
-		else {
-			Write-msg -log -bug -text "[JobResults] Oopps!! Job returned nothing." 
-		}#endelse
-		if ( $JobResults.GetType().BaseType.name -eq 'Object' ) {
-			$tmpJobResults = $JobResults.psobject.copy()
-			$JobResults = @()
-			$JobResults += @($tmpJobResults)
-		}#endif
-		if ( $JobResults.count -gt 0) {
-			Write-Verbose "[Function:VerifyComputers]:return:[$($ComputerNames)]"
-			$JobResults | Export-Clixml -Path $VerifyCompsResultFile -Depth 10 -Force
-			return $ComputerNames
-		}#endif
-		else {
-			return $false
-		}
-	}#endOffunction
 
 	<# ---------------------------------------------------------------------------------------------------------
 	Funkciju definēšanu beidzām
@@ -1337,6 +943,7 @@ PROCESS {
 			}#endelse
 		}#endForEach
 	}#endif
+	
 	<# ---------------------------------------------------------------------------------------------------------
 		izpildam Asset skriptu			- $CompAssetFileName	= "lib\Get-CompAsset.ps1"
 		izpildam Get-Software skriptu	- $CompSoftwareFileName = "lib\Get-CompSoftware.ps1"
@@ -1492,10 +1099,10 @@ PROCESS {
 									Name    = (($_.Split('|'))[0]).trim(); ;
 									Title   = (($_.Split('|'))[1]).trim();
 									Message	= (($_.Split('|'))[2]).trim();
-								}#endobject
+								}
 								$i++
-							}#endforeach
-						}#endif
+							}
+						}
 						#Write-Host "2: [$($row.Updates.Count)][$(if ( $row.Updates) {"True"})][$(if ( $null -eq $row.Updates ) {"True"})]"
 						if ( $null -ne $row.Updates ) {
 							$row.Updates | ForEach-Object {
@@ -1504,10 +1111,10 @@ PROCESS {
 									Name    = (($_.Split('|'))[0]).trim(); ;
 									Title   = (($_.Split('|'))[1]).trim();
 									Message	= (($_.Split('|'))[2]).trim();
-								}#endobject
+								}
 								$i++
-							}#endforeach
-						}#endif
+							}
+						}
 						#Write-Host "3: [$($row.ScheduledTask.Count)][$(if ( $row.ScheduledTask) {"True"})][$(if ( $null -eq $row.ScheduledTask ) {"True"})]"
 						if ( $null -ne $row.ScheduledTask ) {
 							$row.ScheduledTask | ForEach-Object {
@@ -1516,10 +1123,10 @@ PROCESS {
 									Name    = (($_.Split('|'))[0]).trim(); ;
 									Title   = (($_.Split('|'))[1]).trim();
 									Message	= (($_.Split('|'))[2]).trim();
-								}#endobject
+								}
 								$i++
-							}#endforeach
-						}#endif
+							}
+						}
 						#Write-Host "4: [$($row.ErrorMsg.Count)][$(if ( $row.ErrorMsg) {"True"})][$(if ( $null -eq $row.ErrorMsg ) {"True"})]"
 						if ( $null -ne $row.ErrorMsg ) {
 							$row.ErrorMsg | ForEach-Object {
@@ -1528,11 +1135,11 @@ PROCESS {
 									Name    = (($_.Split('|'))[0]).trim(); ;
 									Title   = (($_.Split('|'))[1]).trim();
 									Message	= (($_.Split('|'))[2]).trim();
-								}#endobject
+								}
 								$i++
-							}#endforeach
-						}#endif
-					}#endforeach
+							}
+						}
+					}
 					if ( $PSCmdlet.ParameterSetName -like "Name[cu]*" ) {
 						Write-Host "`nReport:"
 						Write-Host "======="
@@ -1550,29 +1157,29 @@ PROCESS {
 						Write-msg -log -text "[Main] The report file is [ $OutputToFile ]."
 					}
 
-				}#endelse
-			}#endif
-		}#endtry
+				}
+			}
+		}
 		catch {
 			Write-ErrorMsg -Name 'JObRunners' -InputObject $_
-		}#endcatch
+		}
 		finally {
 			if ( $CompSession.count -gt 0 ) {
 				Remove-PSSession -Session $CompSession
-			}#endif
-		}#endfinally
-	}#endif
+			}
+		}
+	}
 	else {
 		if ( $PSCmdlet.ParameterSetName -like "Name[cu]*" -or $PSCmdlet.ParameterSetName -like "InPath[cu]*" ) {
 			Write-msg -log -bug -text "[$(if($Check){"Check"}elseif($Update){"Update"})] No computer in list."
-		}#endif
-	}#endelse
+		}
+	}
+
 	<# ---------------------------------------------------------------------------------------------------------
 		Izsaucam EventLog skriptu: NameEventLog or InPathEventLog; $CompEventsFileName 	= "lib\Get-CompEvents.ps1"
 		# Get-CompEvents.ps1 [-InPath] <FileInfo> [-OutPath <switch>] [-Days <int>] [<CommonParameters>]
 		# Get-CompEvents.ps1 [-Name] <string> [-Days <int>] [<CommonParameters>]
 	--------------------------------------------------------------------------------------------------------- #>
-
 	if ( ( $RemoteComputers.count -gt 0 ) -and $EventLog ) {
 		try {
 			Write-msg -log -text "[EventLog]:got:[$($RemoteComputers.count)]"
@@ -1581,34 +1188,34 @@ PROCESS {
 			$__throwMessage = $null
 			if (-NOT ( Test-Path -Path $CompEventsFile -PathType Leaf )) {
 				throw $__throwMessage = "[EventLog] script file [$CompEventsFile] not found. Fatal error."
-			}#endif
+			}
 
 			if ( $PSCmdlet.ParameterSetName -like "InPathEventLog" ) {
 				$tmpFile = "$DataDir\$ScriptRandomID.tmp"
 				$RemoteComputers | Out-File $tmpFile -Force
 				$ArgumentList = "`-InPath $((Resolve-Path $tmpFile).Path) $(if($OutPath) {" `-OutPath `-InPathFileName $((Resolve-Path $InPath).Path) "})$(if($Days){" `-Days $Days "})"
-			}#endif
+			}
 			else {
 				$tmpName = $RemoteComputers[0]
 				$ArgumentList = "`-Name $tmpName $(if($Days){" `-Days $Days "})"
-			}#endelse
+			}
 			Write-Verbose "[Invoke-Expression] `& $CompEventsFile $ArgumentList "
 			Invoke-Expression "& `"$CompEventsFile`" $ArgumentList "
 			if ( $PSCmdlet.ParameterSetName -like "InPathEventLog" ) { Remove-Item -Path $tmpFile }
-		}#endtry
+		}
 		catch {
 			if ($__throwMessage) {
 				Write-msg -log -bug -text "$__throwMessage"
-			}#endif
+			}
 			else {
 				Write-ErrorMsg -Name 'EventLog' -InputObject $_
-			}#endelse
-		}#endcatch
-	}#endif
+			}
+		}
+	}
 	else {
 		if ( $PSCmdlet.ParameterSetName -like "*EventLog" ) {
 			Write-msg -log -bug -text "[EventLog] No computer in list."
-		}#endif
+		}
 	}
 
 	<# ---------------------------------------------------------------------------------------------------------
@@ -1624,10 +1231,10 @@ PROCESS {
 			$__throwMessage = $null
 			if (-NOT ( Test-Path -Path $CompProgramFile -PathType Leaf )) {
 				throw $__throwMessage = "[$(if($install){"Install"}elseif($Uninstall){"Uninstall"})] script file [$CompProgramFile] not found. Fatal error."
-			}#endif
+			}
 			if (-NOT ( Test-Path -Path $CompWakeOnLanFile -PathType Leaf )) {
 				throw $__throwMessage = "[WakeOnLan] script file [$CompWakeOnLanFile] not found. Fatal error."
-			}#endif
+			}
 
 			if ( $PSCmdlet.ParameterSetName -eq "Name4Install" -or $PSCmdlet.ParameterSetName -eq "InPath4Install" ) {
 
@@ -1637,20 +1244,19 @@ PROCESS {
 				Write-Verbose "[Installer] Set-Jobs -Computers $RemoteComputers -ScriptBlockName 'SBInstall' -Argument1 $Install"
 				Write-Host "[Installer] waiting for results:"
 				$JobResults = Set-Jobs -Computers $RemoteComputers -ScriptBlockName 'SBInstall' #-Argument1 $Install
-			}#endif
+			}
 			elseif ( $PSCmdlet.ParameterSetName -eq "Name4Uninstall" -or $PSCmdlet.ParameterSetName -eq "InPath4Uninstall" ) {
 
-				#region kriptējam $Uninstall parametru
+				#kriptējam $Uninstall parametru
 				$secParameter = $Uninstall | ConvertTo-SecureString -AsPlainText -Force
 				$EncryptedParameter = $secParameter | ConvertFrom-SecureString
-				#end region
 
 				# Set-CompProgram.ps1 [-ComputerName] <string> [-CryptedIdNumber <string>] [<CommonParameters>]
 
 				Write-Verbose "[Uninstaller] Set-Jobs -Computers $RemoteComputers -ScriptBlockName 'SBUninstall' -Argument1 $EncryptedParameter"
 				Write-Host "[Uninstaller] waiting for results:"
 				$JobResults = Set-Jobs -Computers $RemoteComputers -ScriptBlockName 'SBUninstall' -Argument1 $EncryptedParameter
-			}#endelseif
+			}
 			elseif ( $PSCmdlet.ParameterSetName -eq "WakeOnLanName" -or $PSCmdlet.ParameterSetName -eq "WakeOnLanInPath"  ) {
 
 				# Invoke-CompWakeOnLan.ps1 [-ComputerName] <string[]> [-DataArchiveFile] <FileInfo> [-CompTestOnline] <FileInfo> [<CommonParameters>]
@@ -1660,7 +1266,7 @@ PROCESS {
 				Write-Host "[Waker] waiting for results:"
 				$JobResults = Set-Jobs -Computers $RemoteComputers -ScriptBlockName 'SBWakeOnLan'
 				
-			}#endelseif
+			}
 			
 			Write-Host "`n[Results]=====================================================================================================" -ForegroundColor Yellow
 			$JobResults | Sort-Object -Property Computer, id `
@@ -1672,18 +1278,18 @@ PROCESS {
 					else { Write-Host "$_" } }
 			Write-Host "--------------------------------------------------------------------------------------------------------------" -ForegroundColor Yellow
 
-		}#endtry
+		}
 		catch {
 			if ($__throwMessage) {
 				Write-msg -log -bug -text "$__throwMessage"
-			}#endif
+			}
 			else {
 				Write-ErrorMsg -Name $(if ($Install) { "Install" }elseif ($Uninstall) { "Uninstall" }else { "WakeOnLan" }) -InputObject $_
-			}#endelse
-		}#endcatch
-	}#endif
-}#endOfprocess
+			}
+		}
+	}
+}
 
 END {
 	Stop-Watch -Timer $scriptWatch -Name Script
-}#endOfend
+}
