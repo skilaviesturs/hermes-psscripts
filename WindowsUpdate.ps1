@@ -161,7 +161,7 @@ Skripta piespiedu pārbaude uz skripta jauninājumu pieejamību skripta etalona 
 
 .NOTES
 	Author:	Viesturs Skila
-	Version: 2.5.4
+	Version: 3.0.1
 #>
 [CmdletBinding(DefaultParameterSetName = 'InPathCheck')]
 param (
@@ -518,15 +518,17 @@ BEGIN {
 		Zemāk veicam izmaiņas, ja patiešām saprotam, ko darām.
 	--------------------------------------------------------------------------------------------------------- #>
 	#Skripta tehniskie mainīgie
-	$CurVersion = "2.5.4"
+	if ((Get-Module).name -eq "WindowsUpdate"){Remove-Module -Name WindowsUpdate}
+	Import-Module -Name ".\WindowsUpdate.psm1"
+	$CurVersion = "3.0.1"
 	$scriptWatch	= [System.Diagnostics.Stopwatch]::startNew()
 	#Skritpa konfigurācijas datnes
 	$__ScriptName	= $MyInvocation.MyCommand
 	$__ScriptPath	= Split-Path (Get-Variable MyInvocation -Scope Script).Value.Mycommand.Definition -Parent
 	#Atskaitēm un datu uzkrāšanai
 	$ReportPath = "$__ScriptPath\result"
-	$DataDir = "$__ScriptPath\lib\data"
-	$BackupDir = "$__ScriptPath\lib\data\backup"
+	$DataDir = "$__ScriptPath\data"
+	$BackupDir = "$__ScriptPath\data\backup"
 	#Helper scriptu bibliotēkas
 	$CompUpdateFileName = "lib\Set-CompUpdate.ps1"
 	$CompProgramFileName = "lib\Set-CompProgram.ps1"
@@ -572,42 +574,7 @@ BEGIN {
 		Exit
 	}#endif
 
-	Function Stop-Watch {
-		[CmdletBinding()] 
-		param (
-			[Parameter(Mandatory = $True)]
-			[ValidateNotNullOrEmpty()]
-			[object]$Timer,
-			[Parameter(Mandatory = $True)]
-			[ValidateNotNullOrEmpty()]
-			[string]$Name
-		)
-		$Timer.Stop()
-		if ( $Timer.Elapsed.Minutes -le 9 -and $Timer.Elapsed.Minutes -gt 0 ) { $bMin = "0$($Timer.Elapsed.Minutes)" } else { $bMin = "$($Timer.Elapsed.Minutes)" }
-		if ( $Timer.Elapsed.Seconds -le 9 -and $Timer.Elapsed.Seconds -gt 0 ) { $bSec = "0$($Timer.Elapsed.Seconds)" } else { $bSec = "$($Timer.Elapsed.Seconds)" }
-		if ($Name -notlike 'JOBers') {
-			Write-msg -log -text "[$Name] finished in $(
-				if ( [int]$Timer.Elapsed.Hours -gt 0 ) {"$($Timer.Elapsed.Hours)`:$bMin hrs"}
-				elseif ( [int]$Timer.Elapsed.Minutes -gt 0 ) {"$($Timer.Elapsed.Minutes)`:$bSec min"}
-				else { "$($Timer.Elapsed.Seconds)`.$($Timer.Elapsed.Milliseconds) sec" }
-			)"
-			Write-Host "[$Name] finished in $(
-			if ( [int]$Timer.Elapsed.Hours -gt 0 ) {"$($Timer.Elapsed.Hours)`:$bMin hrs"}
-			elseif ( [int]$Timer.Elapsed.Minutes -gt 0 ) {"$($Timer.Elapsed.Minutes)`:$bSec min"}
-			else { "$($Timer.Elapsed.Seconds)`.$($Timer.Elapsed.Milliseconds) sec" }
-			)"
-		}
-		else {
-			Write-Host "`rJobs done in $(
-				if ( [int]$Timer.Elapsed.Hours -gt 0 ) {"$($Timer.Elapsed.Hours)`:$bMin hrs"}
-				elseif ( [int]$Timer.Elapsed.Minutes -gt 0 ) {"$($Timer.Elapsed.Minutes)`:$bSec min"}
-				else { "$($Timer.Elapsed.Seconds)`.$($Timer.Elapsed.Milliseconds) sec" }
-				)" -ForegroundColor Yellow -BackgroundColor Black
-		}
-	}#endOffunction
-
 	Function Write-msg { 
-		[Alias("wrlog")]
 		Param(
 			[Parameter(Mandatory = $true)]
 			[ValidateNotNullOrEmpty()]
