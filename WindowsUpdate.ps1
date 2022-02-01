@@ -531,9 +531,9 @@ BEGIN {
 	$LogFileDir = "$__ScriptPath\log"
 	# ielādējam moduļus
 	Get-PSSession | Remove-PSSession
-	if ((Get-Module).name -eq "ScriptHelpers"){Remove-Module -Name ScriptHelpers}
+	Remove-Module -Name ScriptHelpers -ErrorAction SilentlyContinue
 	Import-Module -Name "$ModuleDir\ScriptHelpers.psm1"
-	if ((Get-Module).name -eq "WindowsUpdate"){Remove-Module -Name WindowsUpdate}
+	Remove-Module -Name WindowsUpdate -ErrorAction SilentlyContinue
 	Import-Module -Name ".\WindowsUpdate.psm1"
 	#Helper scriptu bibliotēkas
 	$CompUpdateFileName = "modules\Set-CompUpdate.ps1"
@@ -650,7 +650,9 @@ BEGIN {
 	[2] ielādējam arhīvu un pārbaudam vai TTL nav beidzies,
 	[3] ja TTL beidzies, veicam datortehnikas pilno pārbaudi uz PSRemote
 	--------------------------------------------------------------------------------------------------------- #>
-	# ielādējam inut parametrus
+	
+	#region ielādējam input parametrus
+
 	if ( $PSCmdlet.ParameterSetName -like "Name*" -or 
 		$PSCmdlet.ParameterSetName -eq "RebootName" -or 
 		$PSCmdlet.ParameterSetName -eq "StopName" -or 
@@ -670,6 +672,8 @@ BEGIN {
 	elseif ( $PSCmdlet.ParameterSetName -like "WakeOnLanInPath" ) {
 		$RemoteComputers = @(Get-Content $InPath | Where-Object { $_ -ne "" } | Where-Object { -not $_.StartsWith('#') }  | ForEach-Object { $_.ToLower() } | Sort-Object | Get-Unique )
 	}
+
+	#endregion
 	
 	if ( $PSCmdlet.ParameterSetName -like "Name*" -or 
 		$PSCmdlet.ParameterSetName -like "InPath*" -or
@@ -701,15 +705,16 @@ BEGIN {
 
 		$OfflineComputers = @()
 		Write-Verbose "`& `"$CompTestOnlineFile`" $ArgumentListOnline "
+		
 		$OnlineComps = Invoke-Expression "& `"$CompTestOnlineFile`" $ArgumentListOnline "
 
 		Write-Verbose "OnlineComps:[$(if ( $OnlineComps ) {"Atgriezts masīvs"}  else {"Atgriezts tukšs masīvs"})]"
 		if ( $OnlineComps ) {
 			Write-Verbose "1.2:[OnlineComps]---------------------------------------------------------------"
-			$OnlineComps | Sort-Object -Property AddDate -Descending `
-			| Format-Table AddDate, PipedName, DNSName, MacAddress -AutoSize  `
-			| Out-String -Stream | Where-Object { $_ -ne "" } `
-			| ForEach-Object { Write-Verbose "$_" }
+			$OnlineComps | Sort-Object -Property AddDate -Descending |
+			Format-Table AddDate, PipedName, DNSName, MacAddress -AutoSize | 
+			Out-String -Stream | Where-Object { $_ -ne "" } |
+			ForEach-Object { Write-Verbose "$_" }
 			Write-Verbose "--------------------------------------------------------------------------------"
 			Write-Verbose "1.3:OnlineComps:[$(if ( $OnlineComps.GetType().BaseType.name -eq 'Array' -and $OnlineComps.count -gt 0 ) {"Array"} `
 				elseif ( $OnlineComps.GetType().BaseType.name -eq 'Object' ) {"Object"} else {"Other"})]; DataArchive:[$(`
@@ -717,19 +722,19 @@ BEGIN {
 				elseif ( $DataArchive.GetType().BaseType.name -eq 'Array' -and $DataArchive.count -eq 0 ) {"Empty Array"} `
 				elseif ( $DataArchive.GetType().BaseType.name -eq 'Object' ) {"Object"} else {"Other"})]`
 				"
-		}#endif
+		}
 		
 		#Ja OnlineComps atgriež vienu objektu un tas nav tukšs, tad to pārveidojam to par objektu masīvu
 		if ( $OnlineComps.GetType().BaseType.name -eq 'Object' ) {
 			$tmpOnlineComps = $OnlineComps.psobject.copy()
 			$OnlineComps = @()
 			$OnlineComps += @($tmpOnlineComps)
-		}#endif
+		}
 
 		if ( $OnlineComps -eq $false) {
-			Write-Verbose "[OnlineComps] returned empty object"
+			Write-Verbose "[TestOnline] returned empty object"
 			$RemoteComputers = @()
-		}#endif
+		}
 		#ja atgriezts objektu masīvs
 		elseif ( $OnlineComps.GetType().BaseType.name -eq 'Array' -and $OnlineComps.count -gt 0 ) {
 			#Atlasām offline datorus
@@ -737,8 +742,8 @@ BEGIN {
 				if ( $OnlineComps.PipedName.Contains($_) -eq $false) {
 					Write-Verbose "1:[OnlineComps]:[$($_)] -=> [OfflineComputers]] "
 					$OfflineComputers += @($_)
-				}#endif
-			}#endforeach
+				}
+			}
 			[string]$vstring = $null
 			$OnlineComps.DNSName | ForEach-Object { $vstring += "[$_], " }
 			Write-Verbose "2.0:[OnlineComps]: $vstring"
@@ -760,31 +765,31 @@ BEGIN {
 								$_OnlineComps += @($record.DNSName)
 								Write-Verbose "2.1:[Archive]:[$($record.DNSName)]-=> [_OnlineComps]"
 								break :OutOfNestedForEach_LABEL
-							}#endif
+							}
 							else {
 								$RemoteComputers += @($record.DNSName)
 								Write-Verbose "2.2:[Archive]:[$($record.DNSName)]-=> [RemoteComputers]"
 								break :OutOfNestedForEach_LABEL
-							}#endelse
-						}#endif
-					}#endforeach
-				}#endforeach
+							}
+						}
+					}
+				}
 
 				#pārbaudam uz online ierakstu esamību, kas netika atrasti arhīvā - ja ir, tad liekam _Online
 				$OnlineComps.DNSName | ForEach-Object {
 					if ( $_OnlineComps.Contains($_) -eq $false -and $RemoteComputers.Contains($_) -eq $false ) {
 						Write-Verbose "2.3:[Online]:[$($record.DNSName)]-=> [RemoteComputers]"
 						$_OnlineComps += @($_)
-					}#endif
+					}
 				}
-			}#endif
+			}
 			else {
 				$_OnlineComps = $OnlineComps | ForEach-Object { @($_.DNSName) }
-			}#endelse
+			}
 			Write-Verbose "2.4:_OnlineComps:[$_OnlineComps]; RemoteComputers[$RemoteComputers]"
 
 			<# ---------------------------------------------------------------------------------------------------------
-				ja atrasti ieraksti, kam TTL beidzies, veicam datortehnikas veicam padziļināto atbilstības pārbaudi
+				ja atrasti ieraksti, kam TTL beidzies, veicam datortehnikas padziļināto atbilstības pārbaudi
 			--------------------------------------------------------------------------------------------------------- #>
 			if ( $_OnlineComps.count -gt 0 ) {
 
@@ -795,7 +800,7 @@ BEGIN {
 				#Ja pārbaudi neiztur neviens dators
 				if ( $VerifiedComps -eq $false ) {
 					$OfflineComputers += $_OnlineComps | ForEach-Object { @($_) }
-				}#endif
+				}
 				elseif ( $VerifiedComps.count -gt 0 ) {
 					foreach ( $comp in $OnlineComps) { 
 						Write-Verbose "3.1:[OnlineComps] [$($comp.DNSName)]:[$($comp.PipedName)]:[$($comp.AddDate)]:[$($comp.MacAddress)]"
@@ -943,7 +948,7 @@ PROCESS {
 			}#endelse
 		}#endForEach
 	}#endif
-	
+
 	<# ---------------------------------------------------------------------------------------------------------
 		izpildam Asset skriptu			- $CompAssetFileName	= "lib\Get-CompAsset.ps1"
 		izpildam Get-Software skriptu	- $CompSoftwareFileName = "lib\Get-CompSoftware.ps1"

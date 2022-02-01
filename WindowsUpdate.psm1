@@ -20,8 +20,8 @@ Function Get-VerifyComputers {
     $JobResults = $JobResults | Where-Object -Property Computer -ne $null
 
     if ( $JobResults -ne $False -or
-         $JobResults -notlike 'False' -or 
-         $JobResults.Count -gt 0 ) {
+        $JobResults -notlike 'False' -or 
+        $JobResults.Count -gt 0 ) {
 
         $DelComps = @()
 
@@ -102,11 +102,11 @@ Function Get-VerifyComputers {
 #region Set-Jobs
 Function Set-Jobs {
     Param(
-        [Parameter(Position = 0, Mandatory = $true)]
+        [Parameter(Position = 0, Mandatory)]
         [string[]]$Computers,
-        [Parameter(Position = 1, Mandatory = $true)]
+        [Parameter(Position = 1, Mandatory)]
         [string]$ScriptBlockName,
-        [Parameter(Position = 2, Mandatory = $false)]
+        [Parameter(Position = 2, Mandatory)]
         [string]$Argument1
     )
     <# ---------------------------------------------------------------------------------------------------------
@@ -116,51 +116,87 @@ Function Set-Jobs {
     $SBVerifyComps = {
         try {
             $Computer = $args[0]
+            $ObjectReturn = New-Object -TypeName psobject -Property @{
+                Computer         = $Computer
+                isPingTest       = $False
+                isPSversion      = $False
+                isPSWUModule     = $False
+                msgPSWUModuleInf = $Null
+                isJoinObject     = $False
+                msgJoinObjectInf = $Null
+                isLanguage       = $False
+                msgLanguageBug   = $Null
+                isPolicy         = $False
+                msgPolicyBug     = $Null
+                msgCatchErr      = $Null
+            }
             #Write-host "[Comp,block1] $Computer"
             If ( Test-Connection -ComputerName $Computer -Count 1 -Quiet -ErrorAction Stop ) {
-                $isPingTest = $True
-                $RemSess = New-PSSession -ComputerName $Computer -ErrorAction Stop
-                if ( ( Invoke-Command -Session $RemSess -ScriptBlock { $PSVersionTable.PSVersion.Major } ) -ge 5 ) { $isPSversion = $True }
+                $ObjectReturn.isPingTest = $True
+                $RemoteSession = New-PSSession -ComputerName $Computer -ErrorAction Stop
+                if ( ( Invoke-Command -Session $RemoteSession -ScriptBlock { $PSVersionTable.PSVersion.Major } ) -ge 5 ) {
+                    $ObjectReturn.$isPSversion = $True 
+                }
         
                 #check module 'PSWindowsUpdate' is installed, if not, copy from script's root directory to remote computer
-                if (-not ( Invoke-Command -Session $RemSess -ScriptBlock { Get-Module -ListAvailable -Name 'PSWindowsUpdate' } )) {
-                    Copy-Item "lib\modules\PSWindowsUpdate\" -Destination "C:\Program Files\WindowsPowerShell\Modules\" -ToSession $RemSess -Recurse -ErrorAction Stop
-                    $msgPSWUModuleInf = "PSWindowsUpdate module installed on [$computer]."
-                    $isPSWUModule = $True
-                }#endif
+                if (-not ( Invoke-Command -Session $RemoteSession -ScriptBlock { 
+                            Get-Module -ListAvailable -Name 'PSWindowsUpdate' } )) {
+                    $parameters = @{
+                        Destination = "C:\Program Files\WindowsPowerShell\Modules\"
+                        ToSession   = $RemoteSession
+                        Recurse     = $True
+                        ErrorAction = 'Stop'
+                    }
+                    try {
+                        Copy-Item "lib\modules\PSWindowsUpdate\" @parameters
+                        $ObjectReturn.msgPSWUModuleInf = "[PSWindowsUpdate] module is installed on [$computer]."
+                        $ObjectReturn.isPSWUModule = $True
+                    }
+                    catch {
+                        Write-Output "Unable copy [PSWindowsUpdate] module to [$Computer]"
+                        $ObjectReturn.msgPSWUModuleInf = "Unable copy [PSWindowsUpdate] module to [$Computer]"
+                    }
+                
+                }
                 else {
-                    $isPSWUModule = $True
-                }#endelse
-                if (-not ( Invoke-Command -Session $RemSess -ScriptBlock { Get-Module -ListAvailable -Name 'Join-Object' } )) {
-                    Copy-Item "lib\modules\Join-Object\" -Destination "C:\Program Files\WindowsPowerShell\Modules\" -ToSession $RemSess -Recurse -ErrorAction Stop
-                    $msgJoinObjectInf = "Join-Object module installed on [$computer]."
-                    $isJoinObject = $True
-                }#endif
+                    $ObjectReturn.isPSWUModule = $True
+                }
+                if (-not ( Invoke-Command -Session $RemoteSession -ScriptBlock { 
+                        Get-Module -ListAvailable -Name 'Join-Object' } )) {
+                    
+                    try {
+                        Copy-Item "lib\modules\Join-Object\" @parameters
+                        $ObjectReturn.msgJoinObjectInf = "[Join-Object] module is installed on [$computer]."
+                        $ObjectReturn.isJoinObject = $True
+                    }
+                    catch {
+                        Write-Output "Unable copy [Join-Object] module to [$Computer]"
+                        $ObjectReturn.msgJoinObjectInf = "Unable copy [Join-Object] module to [$Computer]"
+                    }
+                
+                }
                 else {
-                    $isJoinObject = $True
-                }#endelse
+                    $ObjectReturn.isJoinObject = $True
+                }
                 #cheking computer is set ExecutionPolicy = RemoteSigned and LanguageMode = FullLanguage
-                $psLanguage = Invoke-Command -Session $RemSess -ScriptBlock { $ExecutionContext.SessionState.LanguageMode }
+                $psLanguage = Invoke-Command -Session $RemoteSession -ScriptBlock { $ExecutionContext.SessionState.LanguageMode }
                 if ( $psLanguage.value -notlike 'FullLanguage' ) {
-                    $msgLanguageBug = "Computer [$Computer] is not ready for PSRemote: LanguageMode is set [$($psLanguage.value)]"
-                }#endif
+                    $ObjectReturn.msgLanguageBug = "Computer [$Computer] is not ready for PSRemote: LanguageMode is set [$($psLanguage.value)]"
+                }
                 else {
-                    $isLanguage = $True
-                }#endelse
-                $policy = Invoke-Command -Session $RemSess -ScriptBlock { Get-ExecutionPolicy }
+                    $ObjectReturn.isLanguage = $True
+                }
+                $policy = Invoke-Command -Session $RemoteSession -ScriptBlock { Get-ExecutionPolicy }
                 if ( $policy.value -notlike 'Unrestricted' -and $policy.value -notlike 'RemoteSigned' ) {
-                    $msgPolicyBug = "Computer [$Computer] is not ready for PSRemote: policy is set [$($policy.value)]"
-                }#endif
+                    $ObjectReturn.msgPolicyBug = "Computer [$Computer] is not ready for PSRemote: policy is set [$($policy.value)]"
+                }
                 else {
-                    $isPolicy = $True
-                }#endelse
-                if ( $RemSess.count -gt 0 ) {
-                    Remove-PSSession -Session $RemSess
-                }#endif
-            }#endif
+                    $ObjectReturn.isPolicy = $True
+                }
+            }
             else {
-                $msgCatchErr = "Computer [$Computer] is not accessible."
-            }#endelse
+                $ObjectReturn.msgCatchErr = "Computer [$Computer] is not accessible."
+            }
             $ObjectReturn = New-Object -TypeName psobject -Property @{
                 Computer         = $Computer ;
                 isPingTest       = if ( $isPingTest ) { $isPingTest } else { $False } ;
@@ -174,30 +210,15 @@ Function Set-Jobs {
                 isPolicy         = if ( $isPolicy ) { $isPolicy } else { $False } ;
                 msgPolicyBug     = if ( $msgPolicyBug ) { $msgPolicyBug } else { $null } ;
                 msgCatchErr      = if ( $msgCatchErr ) { $msgCatchErr } else { $null } ;
-            }#endobject
-            return $ObjectReturn
-        }#endtry
+            }
+        }
         catch {
-            $msgCatchErr = "$_"
-            $ObjectReturn = New-Object -TypeName psobject -Property @{
-                Computer         = $Computer ;
-                isPingTest       = if ( $isPingTest ) { $isPingTest } else { $False } ;
-                isPSversion      = if ( $isPSversion ) { $isPSversion } else { $False } ;
-                isPSWUModule     = if ( $isPSWUModule ) { $isPSWUModule } else { $False } ;
-                msgPSWUModuleInf	= if ( $msgPSWUModuleInf ) { $isPSWUModule } else { $null } ;
-                isJoinObject     = if ( $isJoinObject ) { $isJoinObject } else { $False } ;
-                msgJoinObjectInf	= if ( $msgJoinObjectInf ) { $msgJoinObjectInf } else { $null } ;
-                isLanguage       = if ( $isLanguage ) { $isLanguage } else { $False } ;
-                msgLanguageBug   = if ( $msgLanguageBug ) { $msgLanguageBug } else { $null } ;
-                isPolicy         = if ( $isPolicy ) { $isPolicy } else { $False } ;
-                msgPolicyBug     = if ( $msgPolicyBug ) { $msgPolicyBug } else { $null } ;
-                msgCatchErr      = if ( $msgCatchErr ) { $msgCatchErr } else { $null } ;
-            }#endobject
-            if ( $RemSess.count -gt 0 ) {
-                Remove-PSSession -Session $RemSess
-            }#endif
-            return $ObjectReturn
-        }#endcatch
+            $ObjectReturn.msgCatchErr = "$_"
+        }
+        if ( $RemoteSession.count -gt 0 ) {
+            Remove-PSSession -Session $RemoteSession
+        }
+        $ObjectReturn
     }#endblock
 
     <# ---------------------------------------------------------------------------------------------------------
@@ -208,8 +229,7 @@ Function Set-Jobs {
         $WinUpdFile = $args[1]
         $Update = $args[2]
         $AutoReboot = $args[3]
-        $OutputResults = Invoke-Command -ComputerName $Computer -FilePath $WinUpdFile -ArgumentList ($Update, $AutoReboot)
-        return $OutputResults
+        Invoke-Command -ComputerName $Computer -FilePath $WinUpdFile -ArgumentList ($Update, $AutoReboot)
     }#endblock
 
     <# ---------------------------------------------------------------------------------------------------------
@@ -220,8 +240,7 @@ Function Set-Jobs {
         $Computer = $args[0]
         $CompProgramFile = $args[1]
         $Install = $args[2]
-        $OutputResults = Invoke-Expression "& `"$CompProgramFile`" `-ComputerName $Computer `-InstallPath $Install "
-        return $OutputResults
+        Invoke-Expression "& `"$CompProgramFile`" `-ComputerName $Computer `-InstallPath $Install "
     }#endblock
 
     <# ---------------------------------------------------------------------------------------------------------
@@ -232,8 +251,7 @@ Function Set-Jobs {
         $Computer = $args[0]
         $CompProgramFile = $args[1]
         $EncryptedParameter = $args[2]
-        $OutputResults = Invoke-Expression "& `"$CompProgramFile`" `-ComputerName $Computer `-CryptedIdNumber $EncryptedParameter "
-        return $OutputResults
+        Invoke-Expression "& `"$CompProgramFile`" `-ComputerName $Computer `-CryptedIdNumber $EncryptedParameter "
     }#endblock
 
     <# ---------------------------------------------------------------------------------------------------------
@@ -245,8 +263,7 @@ Function Set-Jobs {
         $CompWakeOnLanFile = $args[1]
         $DataArchiveFile = $args[2]
         $CompTestOnlineFile = $args[3]
-        $OutputResults = Invoke-Expression "& `"$CompWakeOnLanFile`" `-ComputerName $Computer `-DataArchiveFile `"$DataArchiveFile`" `-CompTestOnline `"$CompTestOnlineFile`" "
-        return $OutputResults
+        Invoke-Expression "& `"$CompWakeOnLanFile`" `-ComputerName $Computer `-DataArchiveFile `"$DataArchiveFile`" `-CompTestOnline `"$CompTestOnlineFile`" "
     }#endblock
     <# ---------------------------------------------------------------------------------------------------------
         [JOBers] kods
@@ -333,6 +350,99 @@ Function Get-NormaliseDiskLabelsForExcel {
             }
         }
     }
-    return $computers
+
+    $computers
 }
 #endregion
+
+
+
+
+
+#region Stop-Watch 
+Function Stop-Watch {
+    [CmdletBinding()] 
+    param (
+        [Parameter(Mandatory = $True)]
+        [ValidateNotNullOrEmpty()]
+        [object]$Timer,
+        [Parameter(Mandatory = $True)]
+        [ValidateNotNullOrEmpty()]
+        [string]$Name
+    )
+    $Timer.Stop()
+    if ( $Timer.Elapsed.Minutes -le 9 -and $Timer.Elapsed.Minutes -gt 0 ) { $bMin = "0$($Timer.Elapsed.Minutes)" } else { $bMin = "$($Timer.Elapsed.Minutes)" }
+    if ( $Timer.Elapsed.Seconds -le 9 -and $Timer.Elapsed.Seconds -gt 0 ) { $bSec = "0$($Timer.Elapsed.Seconds)" } else { $bSec = "$($Timer.Elapsed.Seconds)" }
+    if ($Name -notlike 'JOBers') {
+        Write-msg -log -text "[$Name] finished in $(
+            if ( [int]$Timer.Elapsed.Hours -gt 0 ) {"$($Timer.Elapsed.Hours)`:$bMin hrs"}
+            elseif ( [int]$Timer.Elapsed.Minutes -gt 0 ) {"$($Timer.Elapsed.Minutes)`:$bSec min"}
+            else { "$($Timer.Elapsed.Seconds)`.$($Timer.Elapsed.Milliseconds) sec" }
+        )"
+        Write-Host "[$Name] finished in $(
+        if ( [int]$Timer.Elapsed.Hours -gt 0 ) {"$($Timer.Elapsed.Hours)`:$bMin hrs"}
+        elseif ( [int]$Timer.Elapsed.Minutes -gt 0 ) {"$($Timer.Elapsed.Minutes)`:$bSec min"}
+        else { "$($Timer.Elapsed.Seconds)`.$($Timer.Elapsed.Milliseconds) sec" }
+        )"
+    }
+    else {
+        Write-Host "`rJobs done in $(
+            if ( [int]$Timer.Elapsed.Hours -gt 0 ) {"$($Timer.Elapsed.Hours)`:$bMin hrs"}
+            elseif ( [int]$Timer.Elapsed.Minutes -gt 0 ) {"$($Timer.Elapsed.Minutes)`:$bSec min"}
+            else { "$($Timer.Elapsed.Seconds)`.$($Timer.Elapsed.Milliseconds) sec" }
+            )" -ForegroundColor Yellow -BackgroundColor Black
+    }
+}#endOffunction
+
+#endregion 
+
+#region Write-msg
+Function Write-msg { 
+    Param(
+        [Parameter(Mandatory = $true)]
+        [ValidateNotNullOrEmpty()]
+        [string]$text,
+        [switch]$log,
+        [switch]$bug
+    )
+
+    try {
+        #write-debug "[wrlog] Log path: $log"
+        if ( $bug ) { $flag = 'ERROR' } else { $flag = 'INFO' }
+        $timeStamp = Get-Date -Format "yyyy.MM.dd HH:mm:ss"
+        if ( $log -and $bug ) {
+            Write-Warning "[$flag] $text"	
+            Write-Output "$timeStamp [$ScriptRandomID] [$ScriptUser] [$flag] $text" | Out-File "$LogFile.log" -Append -ErrorAction Stop
+        }
+        elseif ( $log ) {
+            Write-Verbose "[$flag] $text"
+            Write-Output "$timeStamp [$ScriptRandomID] [$ScriptUser] [$flag] $text" | Out-File "$LogFile.log" -Append -ErrorAction Stop
+        }
+        else {
+            Write-Verbose "$flag [$ScriptRandomID] $text"
+        }
+    }
+    catch {
+        Write-Warning "[Write-msg] $($_.Exception.Message)"
+        return
+    }
+}
+#endregion
+
+#region Write-ErrorMsg
+Function Write-ErrorMsg {
+    [CmdletBinding()]
+    Param(
+        [Parameter(Mandatory = $true)]
+        [ValidateNotNullOrEmpty()]
+        [object]$InputObject,
+        [Parameter(Mandatory = $true)]
+        [ValidateNotNullOrEmpty()]
+        [string]$Name
+    )
+    Write-msg -log -bug -text "[$name] Error: $($InputObject.Exception.Message)"
+    $string_err = $InputObject | Out-String
+    Write-msg -log -bug -text "$string_err"
+}
+#endregion
+
