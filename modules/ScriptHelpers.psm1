@@ -150,7 +150,6 @@ Function Get-ScriptFileUpdate {
                 Write-msg -log -text "[ScriptUpdate] New version deployed."
             }
             catch {
-                #Write-msg -log -bug -text "[ScriptUpdate] [$FileName] $($_.Exception.Message)"
                 Write-ErrorMsg -Name 'ScriptUpdate' -InputObject $_
             }
         }
