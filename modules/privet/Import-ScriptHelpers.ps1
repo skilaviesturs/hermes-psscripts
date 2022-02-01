@@ -1,4 +1,4 @@
-
+#Requires -Version 5.1
 
 #region Get-ScriptHelp
 Function Get-ScriptHelp {

@@ -526,27 +526,25 @@ BEGIN {
 	#Atskaitēm un datu uzkrāšanai
 	$ReportPath = "$__ScriptPath\result"
 	$Script:DataDir = "$__ScriptPath\data"
-	$BackupDir = "$__ScriptPath\data\backup"
+	$BackupDir = "$Script:DataDir\backup"
 	$ModuleDir = "$__ScriptPath\modules"
 	$LogFileDir = "$__ScriptPath\log"
 	# ielādējam moduļus
 	Get-PSSession | Remove-PSSession
-	Remove-Module -Name ScriptHelpers -ErrorAction SilentlyContinue
-	Import-Module -Name "$ModuleDir\ScriptHelpers.psm1"
 	Remove-Module -Name WindowsUpdate -ErrorAction SilentlyContinue
 	Import-Module -Name ".\WindowsUpdate.psm1"
 	#Helper scriptu bibliotēkas
 	$CompUpdateFileName = "Set-CompUpdate.ps1"
 	$CompProgramFileName = "Set-CompProgram.ps1"
-	$CompAssetFileName = "Get-CompAsset.ps1"
-	$CompSoftwareFileName	= "Get-CompSoftware.ps1"
+	# $CompAssetFileName = "Get-CompAsset.ps1"
+	# $CompSoftwareFileName	= "Get-CompSoftware.ps1"
 	$CompEventsFileName = "Get-CompEvents.ps1"
 	$CompTestOnlineFileName	= "Get-CompTestOnline.ps1"
 	$CompWakeOnLanFileName	= "Invoke-CompWakeOnLan.ps1"
 	$WinUpdFile = "$ModuleDir\$CompUpdateFileName"
 	$CompProgramFile = "$ModuleDir\$CompProgramFileName"
-	$CompAssetFile	= "$ModuleDir\$CompAssetFileName"
-	$CompSoftwareFile = "$ModuleDir\$CompSoftwareFileName"
+	# $CompAssetFile	= "$ModuleDir\$CompAssetFileName"
+	# $CompSoftwareFile = "$ModuleDir\$CompSoftwareFileName"
 	$CompEventsFile = "$ModuleDir\$CompEventsFileName"
 	$CompTestOnlineFile	= "$ModuleDir\$CompTestOnlineFileName"
 	$CompWakeOnLanFile	= "$ModuleDir\$CompWakeOnLanFileName"
@@ -613,8 +611,8 @@ BEGIN {
 		Get-ScriptFileUpdate $__ScriptName $__ScriptPath $UpdateDir
 		Get-ScriptFileUpdate $CompUpdateFileName $__ScriptPath $UpdateDir
 		Get-ScriptFileUpdate $CompProgramFileName $__ScriptPath $UpdateDir
-		Get-ScriptFileUpdate $CompAssetFileName $__ScriptPath $UpdateDir
-		Get-ScriptFileUpdate $CompSoftwareFileName $__ScriptPath $UpdateDir
+		# Get-ScriptFileUpdate $CompAssetFileName $__ScriptPath $UpdateDir
+		# Get-ScriptFileUpdate $CompSoftwareFileName $__ScriptPath $UpdateDir
 		Get-ScriptFileUpdate $CompEventsFileName $__ScriptPath $UpdateDir
 		Get-ScriptFileUpdate $CompTestOnlineFileName $__ScriptPath $UpdateDir
 		Get-ScriptFileUpdate $CompWakeOnLanFileName $__ScriptPath $UpdateDir
@@ -652,19 +650,21 @@ BEGIN {
 	--------------------------------------------------------------------------------------------------------- #>
 	
 	#region ielādējam input parametrus
-
+	$paramCompTestOnline = @{}
 	if ( $PSCmdlet.ParameterSetName -like "Name*" -or 
 		$PSCmdlet.ParameterSetName -eq "RebootName" -or 
 		$PSCmdlet.ParameterSetName -eq "StopName" -or 
 		$PSCmdlet.ParameterSetName -like "Asset*" ) {
 		$InComputers = @($Name.ToLower())
-		$ArgumentListOnline = "`-Name $InComputers"
+		# $ArgumentListOnline = "`-Name $InComputers"
+		$paramCompTestOnline.Add('Name', $InComputers)
 	}#endif
 	elseif ( $PSCmdlet.ParameterSetName -like "InPath*" -or
 		$PSCmdlet.ParameterSetName -eq "RebootInPath" -or 
 		$PSCmdlet.ParameterSetName -eq "StopInPath" ) {
 		$InComputers = @(Get-Content $InPath | Where-Object { $_ -ne "" } | Where-Object { -not $_.StartsWith('#') }  | ForEach-Object { $_.ToLower() } | Sort-Object | Get-Unique )
-		$ArgumentListOnline = "`-Inpath $InPath"
+		# $ArgumentListOnline = "`-Inpath $InPath"
+		$paramCompTestOnline.Add('Inpath', $InPath)
 	}#endelseif
 	elseif ( $PSCmdlet.ParameterSetName -like "WakeOnLanName" ) {
 		$RemoteComputers = @($Name.ToLower())
@@ -706,7 +706,8 @@ BEGIN {
 		$OfflineComputers = @()
 		Write-Verbose "`& `"$CompTestOnlineFile`" $ArgumentListOnline "
 		
-		$OnlineComps = Invoke-Expression "& `"$CompTestOnlineFile`" $ArgumentListOnline "
+		# Izsaucam Get-CompTestOnline.ps1
+		$OnlineComps = Get-CompTestOnline @paramCompTestOnline
 
 		Write-Verbose "OnlineComps:[$(if ( $OnlineComps ) {"Atgriezts masīvs"}  else {"Atgriezts tukšs masīvs"})]"
 		if ( $OnlineComps ) {
@@ -724,7 +725,7 @@ BEGIN {
 				"
 		}
 		
-		#Ja OnlineComps atgriež vienu objektu un tas nav tukšs, tad to pārveidojam to par objektu masīvu
+		#Ja OnlineComps ir objekts, tad to pārveidojam to par objektu masīvu
 		if ( $OnlineComps.GetType().BaseType.name -eq 'Object' ) {
 			$tmpOnlineComps = $OnlineComps.psobject.copy()
 			$OnlineComps = @()
@@ -732,7 +733,7 @@ BEGIN {
 		}
 
 		if ( $OnlineComps -eq $false) {
-			Write-Verbose "[TestOnline] returned empty object"
+			Write-Verbose "[Get-CompTestOnline] returned an empty object"
 			$RemoteComputers = @()
 		}
 		#ja atgriezts objektu masīvs
@@ -793,7 +794,8 @@ BEGIN {
 			--------------------------------------------------------------------------------------------------------- #>
 			if ( $_OnlineComps.count -gt 0 ) {
 
-				$VerifiedComps = Get-VerifyComputers -ComputerNames $_OnlineComps
+				# Pārbaudam datoru Powershell iestatījumu atbilstību 
+				$VerifiedComps = Test-VSkRemoteComputer -ComputerName $_OnlineComps
 				
 				Write-Verbose "3.0: Got from VerifiedComps:[$VerifiedComps]"
 
@@ -870,7 +872,14 @@ BEGIN {
 		Write-Verbose "--------------------------------------------------------------------------------"
 		#>
 		#ierakstām datus arhīvā
-		Copy-Item -Path $DataArchiveFile -Destination "$BackupDir\DataArchive-$(Get-Date -Format "yyyyMMddHHmm").bck"
+		$parameter = @{
+			Path        = $DataArchiveFile
+			Destination = "$BackupDir\DataArchive-$(Get-Date -Format "yyyyMMddHHmm").bck"
+			ErrorAction = 'SilentlyContinue'
+		}
+
+		Copy-Item @parameter
+
 		$DataArchive | Export-Clixml -Path $DataArchiveFile -Depth 10 -Force
 
 		Write-Verbose "[Online]:[$($RemoteComputers.count)],[Offline]:[$($OfflineComputers.Count)]"
@@ -959,26 +968,33 @@ PROCESS {
 			Write-msg -log -text "[Asset]:got:[$($RemoteComputers.count)] -=> [$($CompSession.count)] $(if ( $RemoteComputers.count -gt 1 ) {"computers"} else {"computer"} )"
 			Write-Host "[Asset]:got:[$($RemoteComputers.count)] -=> [$($CompSession.count)] $(if ( $RemoteComputers.count -gt 1 ) {"computers"} else {"computer"} )"
 			
-			$__throwMessage = $null
-			if (-NOT ( Test-Path -Path $CompAssetFile -PathType Leaf )) {
-				throw $__throwMessage = "[Asset] script file [$CompAssetFile] not found. Fatal error."
-			}#endif
-			elseif (-NOT ( Test-Path -Path $CompSoftwareFile -PathType Leaf )) {
-				throw $__throwMessage = "[Asset] script file [$CompSoftwareFile] not found. Fatal error."
-			}
+			# $__throwMessage = $null
+			# if (-NOT ( Test-Path -Path $CompAssetFile -PathType Leaf )) {
+			# 	throw $__throwMessage = "[Asset] script file [$CompAssetFile] not found. Fatal error."
+			# }#endif
+			# elseif (-NOT ( Test-Path -Path $CompSoftwareFile -PathType Leaf )) {
+			# 	throw $__throwMessage = "[Asset] script file [$CompSoftwareFile] not found. Fatal error."
+			# }
 
 			if ( $PSCmdlet.ParameterSetName -like "NameAsset" ) {
 				if ( $Hardware ) {
 					Write-Host "`n[Computer]====================================================================================================" -ForegroundColor Yellow
-					$result = Invoke-Command -Session $CompSession -FilePath $CompAssetFile -ArgumentList ($true)
-					$result | Format-List | Out-String -Stream | Where-Object { $_ -ne "" } `
-					| ForEach-Object { Write-Verbose "$_" }
+
+					# $result = Invoke-Command -Session $CompSession -FilePath $CompAssetFile -ArgumentList ($true)
+					$result = Invoke-Command -Session $CompSession -ScriptBlock ${Function:Get-CompHardware} -ArgumentList ($true)
+
+					$result | Format-List | Out-String -Stream | Where-Object { $_ -ne "" } |
+					ForEach-Object { Write-Verbose "$_" }
 				}#endif
 				if ( -NOT $NoSoftware ) {
 					Write-Host "`n[Software]====================================================================================================" -ForegroundColor Yellow
-					$result = Invoke-Command -Session $CompSession -FilePath $CompSoftwareFile -ArgumentList ($Include, $Exclude) `
-					| Sort-Object -Property DisplayName `
-					| Select-Object PSComputerName, @{name = 'Name'; expression = { $_.DisplayName } }, @{name = 'Version'; expression = { $_.DisplayVersion } }, Scope, IdentifyingNumber, @{name = 'Arch'; expression = { $_.Architecture } } -Unique
+
+					$result = Invoke-Command -Session $CompSession -ScriptBlock ${Function:Get-CompSoftware} -ArgumentList ($Include, $Exclude) |
+					Sort-Object -Property DisplayName |
+					Select-Object PSComputerName, @{ name = 'Name'; expression = { $_.DisplayName } }, 
+					@{name = 'Version'; expression = { $_.DisplayVersion } }, Scope, IdentifyingNumber, 
+					@{name = 'Arch'; expression = { $_.Architecture } } -Unique
+
 					if ($result) {
 						$result	| Format-Table Name, Version, IdentifyingNumber, Scope, Arch -AutoSize
 					}#endif
@@ -991,7 +1007,7 @@ PROCESS {
 			}#endif
 			if ($PSCmdlet.ParameterSetName -like "InPathAsset" ) {
 				Write-Host "`n[Software]====================================================================================================" -ForegroundColor Yellow
-				$result = Invoke-Command -Session $CompSession -FilePath $CompSoftwareFile -ArgumentList ($Include, $Exclude) `
+				$result = Invoke-Command -Session $CompSession -ScriptBlock ${Function:Get-CompSoftware} -ArgumentList ($Include, $Exclude) `
 				| Sort-Object -Property PSComputerName, DisplayName `
 				| Select-Object PSComputerName, @{name = 'Name'; expression = { $_.DisplayName } }, @{name = 'Version'; expression = { $_.DisplayVersion } }, Scope, IdentifyingNumber, @{name = 'Arch'; expression = { $_.Architecture } } -Unique
 				if ($result) {
@@ -1087,7 +1103,7 @@ PROCESS {
 					Write-msg -log -text "Sending instructions to [$($CompSession.count)] $(if ( $RemoteComputers.count -gt 1 ) {"computers"} else {"computer"} )"
 					
 					# Run Windows install script on to each computer
-					$JobResults = Set-Jobs -Computers $RemoteComputers -ScriptBlockName 'SBWindowsUpdate'
+					$JobResults = Send-VSkJob -Computers $RemoteComputers -ScriptBlockName 'SBWindowsUpdate'
 					#$JobResults
 					Write-Host "=================================================================================================" -ForegroundColor Yellow
 					# Collect remote logs
@@ -1233,22 +1249,22 @@ PROCESS {
 			Write-msg -log -text "[$(if($Install){"Install"}elseif($Uninstall){"Uninstall"}else{"WakeOnLan"})]:got:[$($RemoteComputers.count)]"
 			Write-Verbose "[$(if($Install){"Install"}elseif($Uninstall){"Uninstall"}else{"WakeOnLan"})]:got:[$($RemoteComputers.count)]"
 			
-			$__throwMessage = $null
-			if (-NOT ( Test-Path -Path $CompProgramFile -PathType Leaf )) {
-				throw $__throwMessage = "[$(if($install){"Install"}elseif($Uninstall){"Uninstall"})] script file [$CompProgramFile] not found. Fatal error."
-			}
-			if (-NOT ( Test-Path -Path $CompWakeOnLanFile -PathType Leaf )) {
-				throw $__throwMessage = "[WakeOnLan] script file [$CompWakeOnLanFile] not found. Fatal error."
-			}
+			# $__throwMessage = $null
+			# if (-NOT ( Test-Path -Path $CompProgramFile -PathType Leaf )) {
+			# 	throw $__throwMessage = "[$(if($install){"Install"}elseif($Uninstall){"Uninstall"})] script file [$CompProgramFile] not found. Fatal error."
+			# }
+			# if (-NOT ( Test-Path -Path $CompWakeOnLanFile -PathType Leaf )) {
+			# 	throw $__throwMessage = "[WakeOnLan] script file [$CompWakeOnLanFile] not found. Fatal error."
+			# }
 
 			if ( $PSCmdlet.ParameterSetName -eq "Name4Install" -or $PSCmdlet.ParameterSetName -eq "InPath4Install" ) {
 
 				# Set-CompProgram.ps1 [-ComputerName] <string> [-InstallPath <FileInfo>] [<CommonParameters>]
-				# Mainīgo $Install nepadodam uz Set-Jobs funkciju, jo tā tips nav string. To padosim uz skriptblocku pa tiešo
+				# Mainīgo $Install nepadodam uz Send-VSkJob funkciju, jo tā tips nav string. To padosim uz skriptblocku pa tiešo
 
-				Write-Verbose "[Installer] Set-Jobs -Computers $RemoteComputers -ScriptBlockName 'SBInstall' -Argument1 $Install"
+				Write-Verbose "[Installer] Send-VSkJob -Computers $RemoteComputers -ScriptBlockName 'SBInstall' -Argument1 $Install"
 				Write-Host "[Installer] waiting for results:"
-				$JobResults = Set-Jobs -Computers $RemoteComputers -ScriptBlockName 'SBInstall' #-Argument1 $Install
+				$JobResults = Send-VSkJob -Computers $RemoteComputers -ScriptBlockName 'SBInstall' #-Argument1 $Install
 			}
 			elseif ( $PSCmdlet.ParameterSetName -eq "Name4Uninstall" -or $PSCmdlet.ParameterSetName -eq "InPath4Uninstall" ) {
 
@@ -1258,18 +1274,18 @@ PROCESS {
 
 				# Set-CompProgram.ps1 [-ComputerName] <string> [-CryptedIdNumber <string>] [<CommonParameters>]
 
-				Write-Verbose "[Uninstaller] Set-Jobs -Computers $RemoteComputers -ScriptBlockName 'SBUninstall' -Argument1 $EncryptedParameter"
+				Write-Verbose "[Uninstaller] Send-VSkJob -Computers $RemoteComputers -ScriptBlockName 'SBUninstall' -Argument1 $EncryptedParameter"
 				Write-Host "[Uninstaller] waiting for results:"
-				$JobResults = Set-Jobs -Computers $RemoteComputers -ScriptBlockName 'SBUninstall' -Argument1 $EncryptedParameter
+				$JobResults = Send-VSkJob -Computers $RemoteComputers -ScriptBlockName 'SBUninstall' -Argument1 $EncryptedParameter
 			}
 			elseif ( $PSCmdlet.ParameterSetName -eq "WakeOnLanName" -or $PSCmdlet.ParameterSetName -eq "WakeOnLanInPath"  ) {
 
 				# Invoke-CompWakeOnLan.ps1 [-ComputerName] <string[]> [-DataArchiveFile] <FileInfo> [-CompTestOnline] <FileInfo> [<CommonParameters>]
-				# Mainīgo $DataArchiveFile un $CompTestOnlineFile nepadodam uz Set-Jobs funkciju, jo tā tips nav string. To padosim uz skriptblocku pa tiešo
+				# Mainīgo $DataArchiveFile un $CompTestOnlineFile nepadodam uz Send-VSkJob funkciju, jo tā tips nav string. To padosim uz skriptblocku pa tiešo
 
-				Write-Verbose "[Waker] Set-Jobs -Computers $RemoteComputers -ScriptBlockName 'SBWakeOnLan' "
+				Write-Verbose "[Waker] Send-VSkJob -Computers $RemoteComputers -ScriptBlockName 'SBWakeOnLan' "
 				Write-Host "[Waker] waiting for results:"
-				$JobResults = Set-Jobs -Computers $RemoteComputers -ScriptBlockName 'SBWakeOnLan'
+				$JobResults = Send-VSkJob -Computers $RemoteComputers -ScriptBlockName 'SBWakeOnLan'
 				
 			}
 			
