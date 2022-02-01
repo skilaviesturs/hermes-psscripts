@@ -1,5 +1,5 @@
 ﻿#Requires -Version 5.1
-Function Set-CompProgram {
+Function Install-CompProgram {
     <#
     .SYNOPSIS
     Attālināta programmatūras uzstādīšana un noņemšana
