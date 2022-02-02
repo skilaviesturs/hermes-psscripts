@@ -6,8 +6,8 @@ Function Send-VSkJob {
         [string[]]$Computers,
         [Parameter(Position = 1, Mandatory)]
         [string]$ScriptBlockName,
-        [Parameter(Position = 2)]
-        [string]$Argument1
+        [switch]$Update,
+        [switch]$AutoReboot
     )
     $MaxJobsThreads = 25
 
@@ -48,16 +48,16 @@ Function Send-VSkJob {
     # SBWakeOnLan: izsaucam programmas noņemšanas procesu
     # Invoke-CompWakeOnLan.ps1 [-ComputerName] <string[]> [-DataArchiveFile] <FileInfo> [-CompTestOnline] <FileInfo> [<CommonParameters>]
     ---------------------------------------------------------------------------------------------------------#>
-    $SetCompWindowsUpdate = {
-        $Computer = $args[0]
-        $Update = $args[1]
-        $AutoReboot = $args[2]
-        $LocalFunction =  $args[3]
-        Invoke-Command -ComputerName $Computer -Scriptblock {
-            param($update, $autoReboot, $localFunction)
-            [ScriptBlock]::Create($localFunction).Invoke($update,$autoReboot)
-        } -ArgumentList $Update, $AutoReboot, $LocalFunction
-    }#endblock
+    # $SetCompWindowsUpdate = {
+    #     $Computer = $args[0]
+    #     $Update = $args[1]
+    #     $AutoReboot = $args[2]
+    #     $LocalFunction = $args[3]
+    #     Invoke-Command -ComputerName $Computer -Scriptblock {
+    #         param($update, $autoReboot, $localFunction)
+    #         [ScriptBlock]::Create($localFunction).Invoke($update, $autoReboot)
+    #     } -ArgumentList $Update, $AutoReboot, $LocalFunction
+    # }
     <# ---------------------------------------------------------------------------------------------------------
         [JOBers] kods
     --------------------------------------------------------------------------------------------------------- #>
@@ -71,12 +71,28 @@ Function Send-VSkJob {
         }
         
         if ( $ScriptBlockName -eq 'Get-VSkRemoteComputerInfo' ) { 
-            Write-Host "[JOBers] Get-VSkRemoteComputerInfo..."
+            # Write-Host "...[Get-VSkRemoteComputerInfo]..."
             $null = Start-Job -Name "$($Computer)" -Scriptblock ${Function:Get-VSkRemoteComputerInfo} -ArgumentList $Computer 
-            
         }
+
         if ( $ScriptBlockName -eq 'Set-CompWindowsUpdate' ) { 
-            $null = Start-Job -Scriptblock $SetCompWindowsUpdate -ArgumentList $Computer, $Update, $AutoReboot, ${Function:Set-CompWindowsUpdate}
+            $null = Start-Job -Scriptblock {
+                param (
+                    $Computer,
+                    $Update,
+                    $AutoReboot,
+                    $ImportedFunction
+                )
+
+                Invoke-Command -ComputerName $Computer -Scriptblock {
+                    param($Update, $AutoReboot, $ImportedFunction)
+
+                    Write-Host "[Set-CompWindowsUpdate] Update:[$Update], AutoReboot[$AutoReboot]"
+                    [ScriptBlock]::Create($ImportedFunction).Invoke($Update, $AutoReboot)
+
+                } -ArgumentList $Update, $AutoReboot, $ImportedFunction
+            
+            } -ArgumentList ( $Computer, $Update, $AutoReboot, ${Function:Set-CompWindowsUpdate} )
         }
         if ( $ScriptBlockName -eq 'SBInstall' ) { 
             Write-Verbose "[StartJob] Start-Job -Scriptblock $SBInstall -ArgumentList $Computer, $CompProgramFile"

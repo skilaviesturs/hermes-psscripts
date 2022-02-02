@@ -665,8 +665,8 @@ BEGIN {
 		
 		
 		$InComputers = @(Get-Content $InPath | 
-		Where-Object { $_ -ne "" } | Where-Object { -not $_.StartsWith('#') }  |
-		ForEach-Object { $_.ToLower() } | Sort-Object | Get-Unique )
+			Where-Object { $_ -ne "" } | Where-Object { -not $_.StartsWith('#') }  |
+			ForEach-Object { $_.ToLower() } | Sort-Object | Get-Unique )
 
 		# $ArgumentListOnline = "`-Inpath $InPath"
 		$paramCompTestOnline.Add('Inpath', $InPath)
@@ -898,6 +898,8 @@ PROCESS {
 	<# ---------------------------------------------------------------------------------------------------------
 		Reboot vai Stop - prasām apliecinājumus un darām darbu
 	--------------------------------------------------------------------------------------------------------- #>
+	#region REBOOT and STOP
+
 	if ( ( $RemoteComputers.count -gt 0 ) -and `
 		( $PSCmdlet.ParameterSetName -like "Reboot*" -or `
 				$PSCmdlet.ParameterSetName -like "Stop*" ) ) {
@@ -913,8 +915,8 @@ PROCESS {
 						if ($NoWait -or $PSCmdlet.ParameterSetName -eq "RebootInPath") {
 							$parameters = @{
 								ComputerName = $Computer
-							}#endsplat
-						}#endif
+							}
+						}
 						else {
 							$parameters = @{
 								ComputerName = $Computer
@@ -922,21 +924,21 @@ PROCESS {
 								For          = 'Powershell'
 								Timeout      = 300
 								Delay        = 2 
-							}#endsplat
-						}#endelse
+							}
+						}
 						if ($Force) {
 							$parameters.Add( 'Force', $Force ) 
-						}#endif
+						}
 						$parameters.Add( 'ErrorAction', 'Stop' )
 
 						Restart-Computer @parameters
 						Write-msg -log -text "[Reboot] [$Computer] successfully."
 						Write-Host "[Reboot] [$Computer] successfully."
-					}#endtry
+					}
 					catch {
 						Write-ErrorMsg -Name 'Reboot' -InputObject $_
-					}#endcatch
-				}#endif
+					}
+				}
 				if ($Stop) {
 					try {
 						$parameters = @{
@@ -950,23 +952,25 @@ PROCESS {
 						Stop-Computer @parameters
 						Write-msg -log -text "[Stop] [$Computer] successfully."
 						Write-Host "[Stop] [$Computer] successfully."
-					}#endtry
+					}
 					catch {
 						Write-ErrorMsg -Name 'Stop' -InputObject $_
-					}#endcatch
-				}#endif
-			}#endif
+					}
+				}
+			}
 			else {
 				Write-msg -log -text "[$(if($Reboot) {"Reboot"} else {"Stop"})] [$Computer] $(if($Reboot) {"reboot"} else {"shutdown"}) canceled."
 				Write-Host "[$(if($Reboot) {"Reboot"} else {"Stop"})] [$Computer] $(if($Reboot) {"reboot"} else {"shutdown"}) canceled."
-			}#endelse
-		}#endForEach
-	}#endif
+			}
+		}
+	}
+	#endregion
 
 	<# ---------------------------------------------------------------------------------------------------------
 		izpildam Asset skriptu			- $CompAssetFileName	= "lib\Get-CompAsset.ps1"
 		izpildam Get-Software skriptu	- $CompSoftwareFileName = "lib\Get-CompSoftware.ps1"
 	--------------------------------------------------------------------------------------------------------- #>
+	#region ASSET: SOFTWARE and HARDWARE
 	if ( $RemoteComputers.count -gt 0 -and $Asset ) {
 		try {
 			$CompSession = New-PSSession -ComputerName $RemoteComputers -ErrorAction Stop
@@ -1060,10 +1064,13 @@ PROCESS {
 			Write-msg -log -bug -text "[Asset] No computer in list."
 		}#endif
 	}#endelse
+	#endregion
 
 	<# ---------------------------------------------------------------------------------------------------------
-		darbam gatavai datortehnikai izpildam pieprasīto operāciju
+		CHECK, UPDATE and TRACE
 	--------------------------------------------------------------------------------------------------------- #>
+	#region WINDOWS UPDATE: CHECK, UPDATE and TRACE
+
 	if ( ( $RemoteComputers.count -gt 0 ) -and ( $Check -or $Update -or $Trace ) ) {
 		try {
 			Write-msg -log -text "Conecting to [$($RemoteComputers.count)] $(if ( $RemoteComputers.count -gt 1 ) {"computers"} else {"computer"} ).."
@@ -1073,6 +1080,8 @@ PROCESS {
 			Write-Host "[$(if($Check){"Check"}elseif($Update){"Update"})]:got:[$($RemoteComputers.count)] -=> [$($CompSession.count)] $(if ( $RemoteComputers.count -gt 1 ) {"computers"} else {"computer"} )"
 
 			if ($CompSession.count -gt 0 ) {
+
+				#region TRACE
 				if ( $Trace) {
 					
 					$TestScript = {
@@ -1097,20 +1106,34 @@ PROCESS {
 
 						$result | ConvertTo-Json -depth 10 | Out-File "$DataDir\trace.json"
 			
-					}#endif
+					}
 					else {
 						Write-Host "There's no update process started." -Foreground Yellow 
 						Write-msg -log -text "There's no update process started."
-					}#endelse
+					}
 
-				}#endelseif
-				else {
+				}
+				#endregion
+
+				#region CHECK and UPDATE
+				if ($Check -or $Update) {
 					Write-msg -log -text "Sending instructions to [$($CompSession.count)] $(if ( $RemoteComputers.count -gt 1 ) {"computers"} else {"computer"} )"
-
+					Write-Host "[WindowsUpdate] Update:[$($Update)], AutoReboot[$($AutoReboot)]"
 					# Run Windows install script on to each computer
-					$JobResults = Send-VSkJob -Computers $RemoteComputers -ScriptBlockName 'Set-CompWindowsUpdate'
-					#$JobResults
+					$paramVSkJob = @{
+						Computers       = $RemoteComputers
+						ScriptBlockName = 'Set-CompWindowsUpdate'
+						Update          = $Update
+						AutoReboot      = $AutoReboot
+					}
+
+					# if ($Update) { $paramVSkJob.Add('Update', $True) }
+					# if ($AutoReboot) { $paramVSkJob.Add('AutoReboot', $True) } 
+
+					$JobResults = Send-VSkJob @paramVSkJob
+
 					Write-Host "=================================================================================================" -ForegroundColor Yellow
+					
 					# Collect remote logs
 					$ResultOutput = @()
 					$i = 0 
@@ -1185,6 +1208,9 @@ PROCESS {
 
 				}
 			}
+
+			#endregion
+
 		}
 		catch {
 			Write-ErrorMsg -Name 'JObRunners' -InputObject $_
@@ -1201,11 +1227,14 @@ PROCESS {
 		}
 	}
 
+	#endregion
+
 	<# ---------------------------------------------------------------------------------------------------------
 		Izsaucam EventLog skriptu: NameEventLog or InPathEventLog; $CompEventsFileName 	= "lib\Get-CompEvents.ps1"
 		# Get-CompEvents.ps1 [-InPath] <FileInfo> [-OutPath <switch>] [-Days <int>] [<CommonParameters>]
 		# Get-CompEvents.ps1 [-Name] <string> [-Days <int>] [<CommonParameters>]
 	--------------------------------------------------------------------------------------------------------- #>
+	#region  EVENTLOG
 	if ( ( $RemoteComputers.count -gt 0 ) -and $EventLog ) {
 		try {
 			Write-msg -log -text "[EventLog]:got:[$($RemoteComputers.count)]"
@@ -1243,11 +1272,13 @@ PROCESS {
 			Write-msg -log -bug -text "[EventLog] No computer in list."
 		}
 	}
+	#endregion
 
 	<# ---------------------------------------------------------------------------------------------------------
 		Izpildām Install/Uninstall skriptu - $CompProgramFileName = "lib\Set-CompProgram.ps1"
 		Izpildām WakeOnLan skriptu - $CompWakeOnLanFileName	= "lib\Invoke-CompWakeOnLan.ps1"
 	--------------------------------------------------------------------------------------------------------- #>
+	#region INSTALL, UNINSTALL
 	if ( ( $RemoteComputers.count -gt 0 ) -and ( $Install -or $Uninstall -or $WakeOnLan ) ) {
 
 		try {
@@ -1314,6 +1345,8 @@ PROCESS {
 			}
 		}
 	}
+
+	#endregion
 }
 
 END {
