@@ -7,60 +7,12 @@ Function Send-VSkJob {
         [Parameter(Position = 1, Mandatory)]
         [string]$ScriptBlockName,
         [switch]$Update,
-        [switch]$AutoReboot
+        [switch]$AutoReboot,
+        [System.IO.FileInfo]$InstallPath,
+        [string]$UninstallEncryptedParameter,
+        [System.IO.FileInfo]$DataArchiveFile
     )
     $MaxJobsThreads = 25
-
-    <# ---------------------------------------------------------------------------------------------------------
-    # SBInstall: izsaucam programmas uzstādīšanas procesu
-    # Set-CompProgram.ps1 [-ComputerName] <string> [-InstallPath <FileInfo>] [<CommonParameters>]
-    ---------------------------------------------------------------------------------------------------------#>
-    $SBInstall = {
-        $Computer = $args[0]
-        $CompProgramFile = $args[1]
-        $Install = $args[2]
-        Invoke-Expression "& `"$CompProgramFile`" `-ComputerName $Computer `-InstallPath $Install "
-    }#endblock
-
-    <# ---------------------------------------------------------------------------------------------------------
-    # SBInstall: izsaucam programmas noņemšanas procesu
-    # Set-CompProgram.ps1 [-ComputerName] <string> [-CryptedIdNumber <string>] [<CommonParameters>]
-    ---------------------------------------------------------------------------------------------------------#>
-    $SBUninstall = {
-        $Computer = $args[0]
-        $CompProgramFile = $args[1]
-        $EncryptedParameter = $args[2]
-        Invoke-Expression "& `"$CompProgramFile`" `-ComputerName $Computer `-CryptedIdNumber $EncryptedParameter "
-    }#endblock
-
-    <# ---------------------------------------------------------------------------------------------------------
-    # SBWakeOnLan: izsaucam programmas noņemšanas procesu
-    # Invoke-CompWakeOnLan.ps1 [-ComputerName] <string[]> [-DataArchiveFile] <FileInfo> [-CompTestOnline] <FileInfo> [<CommonParameters>]
-    ---------------------------------------------------------------------------------------------------------#>
-    $SBWakeOnLan = {
-        $Computer = $args[0]
-        $CompWakeOnLanFile = $args[1]
-        $DataArchiveFile = $args[2]
-        $CompTestOnlineFile = $args[3]
-        Invoke-Expression "& `"$CompWakeOnLanFile`" `-ComputerName $Computer `-DataArchiveFile `"$DataArchiveFile`" `-CompTestOnline `"$CompTestOnlineFile`" "
-    }#endblock
-    <# ---------------------------------------------------------------------------------------------------------
-    # SBWakeOnLan: izsaucam programmas noņemšanas procesu
-    # Invoke-CompWakeOnLan.ps1 [-ComputerName] <string[]> [-DataArchiveFile] <FileInfo> [-CompTestOnline] <FileInfo> [<CommonParameters>]
-    ---------------------------------------------------------------------------------------------------------#>
-    # $SetCompWindowsUpdate = {
-    #     $Computer = $args[0]
-    #     $Update = $args[1]
-    #     $AutoReboot = $args[2]
-    #     $LocalFunction = $args[3]
-    #     Invoke-Command -ComputerName $Computer -Scriptblock {
-    #         param($update, $autoReboot, $localFunction)
-    #         [ScriptBlock]::Create($localFunction).Invoke($update, $autoReboot)
-    #     } -ArgumentList $Update, $AutoReboot, $LocalFunction
-    # }
-    <# ---------------------------------------------------------------------------------------------------------
-        [JOBers] kods
-    --------------------------------------------------------------------------------------------------------- #>
     $jobWatch = [System.Diagnostics.Stopwatch]::startNew()
     $Output = @()
     Write-Host -NoNewLine "[Set-VSkJobs] Running jobs : " -ForegroundColor Yellow -BackgroundColor Black
@@ -94,18 +46,16 @@ Function Send-VSkJob {
             
             } -ArgumentList ( $Computer, $Update, $AutoReboot, ${Function:Set-CompWindowsUpdate} )
         }
-        if ( $ScriptBlockName -eq 'SBInstall' ) { 
-            Write-Verbose "[StartJob] Start-Job -Scriptblock $SBInstall -ArgumentList $Computer, $CompProgramFile"
-            # $null = Start-Job -Scriptblock $SBInstall -ArgumentList $Computer, $CompProgramFile, $Install
-            $null = Start-Job -Scriptblock ${Function:Install-CompProgram} -ArgumentList $Computer, $CompProgramFile
+        if ( $ScriptBlockName -eq 'Install' ) { 
+            # Install-CompProgram.ps1 -ComputerName EX00001 -InstallPath 'D:\install\7-zip\7z1900-x64.msi'
+            $null = Start-Job -Scriptblock ${Function:Install-CompProgram} -ArgumentList $Computer, $InstallPath
         }
-        if ( $ScriptBlockName -eq 'SBUninstall' ) { 
-            Write-Verbose "[StartJob] Start-Job -Scriptblock $SBUninstall -ArgumentList $Computer, $CompProgramFile, $Argument1"
-            $null = Start-Job -Scriptblock $SBUninstall -ArgumentList $Computer, $CompProgramFile, $Argument1
+        if ( $ScriptBlockName -eq 'Uninstall' ) { 
+            # Uninstall-CompProgram.ps1 -ComputerName EX00001 -CryptedIdNumber 'ASL535LKJAFAFKLKNDG0983095MM36NL3NKLKWEJTBL'
+            $null = Start-Job -Scriptblock ${Function:Uninstall-CompProgram}  -ArgumentList $Computer, $UninstallEncryptedParameter
         }
-        if ( $ScriptBlockName -eq 'SBWakeOnLan' ) { 
-            Write-Verbose "[StartJob] Start-Job -Scriptblock $SBWakeOnLan -ArgumentList $Computer, $CompWakeOnLanFile, $DataArchiveFile, $CompTestOnlineFile"
-            $null = Start-Job -Scriptblock $SBWakeOnLan -ArgumentList $Computer, $CompWakeOnLanFile, $DataArchiveFile, $CompTestOnlineFile
+        if ( $ScriptBlockName -eq 'WakeOnLan' ) { 
+            $null = Start-Job -Scriptblock ${Function:Invoke-CompWakeOnLan}  -ArgumentList $Computer, $DataArchiveFile
         }
         Write-Host -NoNewLine "." -ForegroundColor Yellow -BackgroundColor Black
     }

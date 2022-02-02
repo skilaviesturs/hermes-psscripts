@@ -27,10 +27,10 @@ Function Invoke-CompWakeOnLan {
         )]
         [System.IO.FileInfo]$DataArchiveFile,
     
-        [Parameter(Position = 2, Mandatory = $true, ParameterSetName = 'Name',
-            HelpMessage = "Path to archive file."
-        )]
-        [System.IO.FileInfo]$CompTestOnlineFile,
+        # [Parameter(Position = 2, Mandatory = $true, ParameterSetName = 'Name',
+        #     HelpMessage = "Path to archive file."
+        # )]
+        # [System.IO.FileInfo]$CompTestOnlineFile,
     
         [Parameter(Position = 0, Mandatory = $true,
             ParameterSetName = 'Help'
@@ -79,68 +79,7 @@ Function Invoke-CompWakeOnLan {
                 else { "$($Timer.Elapsed.Seconds)`.$($Timer.Elapsed.Milliseconds) sec" }
                 )"
             )
-            return $LogObject
-        }
-        function Invoke-WakeOnLan {
-            param
-            (
-                # one or more MACAddresses
-                [Parameter(Mandatory = $true, ValueFromPipeline, ValueFromPipelineByPropertyName)]
-                # mac address must be a following this regex pattern:
-                [ValidatePattern('^([0-9A-F]{2}[:-]){5}([0-9A-F]{2})$')]
-                [string[]]
-                $MacAddress 
-            )
-     
-            begin {
-                $LogObject = @()
-                # instantiate a UDP client:
-                $UDPclient = [System.Net.Sockets.UdpClient]::new()
-            }
-            process {
-                foreach ($_ in $MacAddress) {
-                    try {
-                        $currentMacAddress = $_
-            
-                        # get byte array from mac address:
-                        $mac = $currentMacAddress -split '[:-]' |
-                        # convert the hex number into byte:
-                        ForEach-Object {
-                            [System.Convert]::ToByte($_, 16)
-                        }
-     
-                        #region compose the "magic packet"
-                        # create a byte array with 102 bytes initialized to 255 each:
-                        $packet = [byte[]](, 0xFF * 102)
-            
-                        # leave the first 6 bytes untouched, and
-                        # repeat the target mac address bytes in bytes 7 through 102:
-                        6..101 | Foreach-Object { 
-                            # $_ is indexing in the byte array,
-                            # $_ % 6 produces repeating indices between 0 and 5
-                            # (modulo operator)
-                            $packet[$_] = $mac[($_ % 6)]
-                        }
-                        #endregion
-    
-                        # connect to port 400 on broadcast address:
-                        $UDPclient.Connect(([System.Net.IPAddress]::Broadcast), 4000)
-            
-                        # send the magic packet to the broadcast address:
-                        $null = $UDPclient.Send($packet, $packet.Length)
-                        $LogObject += @("[Waker] [SUCCESS] sent magic packet to $currentMacAddress from [$($env:computername)]...")
-                    }
-                    catch {
-                        $LogObject += @("[Waker] [ERROR] unable to send ${mac}: $_" )
-                    }
-                }
-            }
-            end {
-                # release the UDF client and free its memory:
-                $UDPclient.Close()
-                $UDPclient.Dispose()
-                return $LogObject 
-            }
+            $LogObject
         }
     
         if ( Test-Path $DataArchiveFile -PathType Leaf ) {
@@ -184,9 +123,9 @@ Function Invoke-CompWakeOnLan {
                 #Atrodam arhīvā datoru, kas atrodas tajā pašā segmentā, lai no tā varētu pamodināt guļošo
                 foreach ( $rec in $DataArchive ) {
                     if ( $rec.IPAddress -match "$Pattern`*" -and ( $rec.DNSName -notlike $ComputerName -or $rec.PipedName -notlike $ComputerName ) ) {
-                        #Pārbaudam vai atrastais remote dators ir online
-                        #$LogObject += @("[Waker] [INFO]  [Invoke-Expression] `& `"$CompTestOnlineFile`" `-Name $($rec.DNSName) ")
-                        $OnlineRemoteComps = Invoke-Expression "& `"$CompTestOnlineFile`" `-Name $($rec.DNSName) "
+
+                        # $OnlineRemoteComps = Invoke-Expression "& `"$CompTestOnlineFile`" `-Name $($rec.DNSName) "
+                        $OnlineRemoteComps = Invoke-Command -ScriptBlock ${Function:Get-CompTestOnline} -ArgumentList $rec.DNSName
                         #Pārbaudam vai atrastā remote datora WinRM serviss darbojas
                         if ( $OnlineRemoteComps.WinRMservice ) {
                             $HostDNSName = $rec.DNSName
@@ -205,13 +144,6 @@ Function Invoke-CompWakeOnLan {
                     $LogObject += @("[Waker] [INFO] going to WakeOnLan [$TargetMacAddress] from remote host [$HostDNSName].")
                     $result = Invoke-Command -Computername $HostDNSName -ScriptBlock ${Function:Invoke-WakeOnLan} -ArgumentList $TargetMacAddress
                     $result | ForEach-Object { $LogObject += @($_) }
-                    <#Veicam ping
-                    #Invoke-Expression "& ping.exe -a -4 -n 50 $ComputerName "
-                    #Pārbaudam vai dators ir on-line
-                    #Write-Verbose "[Waker]:[Invoke-Expression] `& `"$CompTestOnlineFile`" `-Name $ComputerName "
-                    $WokenComp = Invoke-Expression "& `"$CompTestOnlineFile`" `-Name $ComputerName "
-                    $WokenComp | Format-Table * -AutoSize | Out-String -Stream | Where-Object { $_ -ne "" } | ForEach-Object {  Write-Host "$_" }
-                    #>
                 }
             }
         }

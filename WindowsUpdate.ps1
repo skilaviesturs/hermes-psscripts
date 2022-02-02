@@ -1289,22 +1289,17 @@ PROCESS {
 			Write-msg -log -text "[$(if($Install){"Install"}elseif($Uninstall){"Uninstall"}else{"WakeOnLan"})]:got:[$($RemoteComputers.count)]"
 			Write-Verbose "[$(if($Install){"Install"}elseif($Uninstall){"Uninstall"}else{"WakeOnLan"})]:got:[$($RemoteComputers.count)]"
 			
-			# $__throwMessage = $null
-			# if (-NOT ( Test-Path -Path $CompProgramFile -PathType Leaf )) {
-			# 	throw $__throwMessage = "[$(if($install){"Install"}elseif($Uninstall){"Uninstall"})] script file [$CompProgramFile] not found. Fatal error."
-			# }
-			# if (-NOT ( Test-Path -Path $CompWakeOnLanFile -PathType Leaf )) {
-			# 	throw $__throwMessage = "[WakeOnLan] script file [$CompWakeOnLanFile] not found. Fatal error."
-			# }
+				$parameterVSkJob = @{
+					Computers = $RemoteComputers
+				}
 
 			if ( $PSCmdlet.ParameterSetName -eq "Name4Install" -or $PSCmdlet.ParameterSetName -eq "InPath4Install" ) {
 
-				# Set-CompProgram.ps1 [-ComputerName] <string> [-InstallPath <FileInfo>] [<CommonParameters>]
-				# Mainīgo $Install nepadodam uz Send-VSkJob funkciju, jo tā tips nav string. To padosim uz skriptblocku pa tiešo
-
-				Write-Verbose "[Installer] Send-VSkJob -Computers $RemoteComputers -ScriptBlockName 'SBInstall' -Argument1 $Install"
+				# Install-CompProgram.ps1 [-ComputerName] <string> [-InstallPath <FileInfo>] [<CommonParameters>]
 				Write-Host "[Installer] waiting for results:"
-				$JobResults = Send-VSkJob -Computers $RemoteComputers -ScriptBlockName 'SBInstall' #-Argument1 $Install
+
+				$parameterVSkJob.Add('ScriptBlockName','Install')
+				$parameterVSkJob.Add('InstallPath',$InstallPath)
 			}
 			elseif ( $PSCmdlet.ParameterSetName -eq "Name4Uninstall" -or $PSCmdlet.ParameterSetName -eq "InPath4Uninstall" ) {
 
@@ -1312,23 +1307,25 @@ PROCESS {
 				$secParameter = $Uninstall | ConvertTo-SecureString -AsPlainText -Force
 				$EncryptedParameter = $secParameter | ConvertFrom-SecureString
 
-				# Set-CompProgram.ps1 [-ComputerName] <string> [-CryptedIdNumber <string>] [<CommonParameters>]
-
-				Write-Verbose "[Uninstaller] Send-VSkJob -Computers $RemoteComputers -ScriptBlockName 'SBUninstall' -Argument1 $EncryptedParameter"
+				# Uninstall-CompProgram.ps1 [-ComputerName] <string> [-CryptedIdNumber <string>] [<CommonParameters>]
 				Write-Host "[Uninstaller] waiting for results:"
-				$JobResults = Send-VSkJob -Computers $RemoteComputers -ScriptBlockName 'SBUninstall' -Argument1 $EncryptedParameter
+				
+				$parameterVSkJob.Add('ScriptBlockName','Uninstall')
+				$parameterVSkJob.Add('UninstallEncryptedParameter', $EncryptedParameter)
+
+				# $JobResults = Send-VSkJob  $RemoteComputers -ScriptBlockName 'SBUninstall' -UninstallEncryptedParameter $EncryptedParameter
 			}
 			elseif ( $PSCmdlet.ParameterSetName -eq "WakeOnLanName" -or $PSCmdlet.ParameterSetName -eq "WakeOnLanInPath"  ) {
 
-				# Invoke-CompWakeOnLan.ps1 [-ComputerName] <string[]> [-DataArchiveFile] <FileInfo> [-CompTestOnline] <FileInfo> [<CommonParameters>]
-				# Mainīgo $DataArchiveFile un $CompTestOnlineFile nepadodam uz Send-VSkJob funkciju, jo tā tips nav string. To padosim uz skriptblocku pa tiešo
-
-				Write-Verbose "[Waker] Send-VSkJob -Computers $RemoteComputers -ScriptBlockName 'SBWakeOnLan' "
+				# Invoke-CompWakeOnLan.ps1 [-ComputerName] <string[]> [-DataArchiveFile] <FileInfo> [<CommonParameters>]
 				Write-Host "[Waker] waiting for results:"
-				$JobResults = Send-VSkJob -Computers $RemoteComputers -ScriptBlockName 'SBWakeOnLan'
-				
+
+				$parameterVSkJob.Add('ScriptBlockName','WakeOnLan')
+				$parameterVSkJob.Add('DataArchiveFile', $DataArchiveFile)
 			}
 			
+			$JobResults = Send-VSkJob @parameterVSkJob
+
 			Write-Host "`n[Results]=====================================================================================================" -ForegroundColor Yellow
 			$JobResults | Sort-Object -Property Computer, id `
 			| Format-Table Computer, Message -AutoSize  `
@@ -1341,12 +1338,7 @@ PROCESS {
 
 		}
 		catch {
-			if ($__throwMessage) {
-				Write-msg -log -bug -text "$__throwMessage"
-			}
-			else {
-				Write-ErrorMsg -Name $(if ($Install) { "Install" }elseif ($Uninstall) { "Uninstall" }else { "WakeOnLan" }) -InputObject $_
-			}
+			Write-ErrorMsg -Name $(if ($Install) { "Install" }elseif ($Uninstall) { "Uninstall" }else { "WakeOnLan" }) -InputObject $_
 		}
 	}
 
