@@ -759,7 +759,9 @@ BEGIN {
 				pārbaudam ARHĪVĀ vai datoram  nav beidzies TTL derīgums: 12 stundas)
 			--------------------------------------------------------------------------------------------------------- #>
 			#izlaižam arhīva soli, ja [1] arhīvs nesatur vērtības vai [2] Online ir tikai viens ieraksts
-			if ( $DataArchive.GetType().BaseType.name -eq 'Array' -and $DataArchive.count -gt 0 -and $OnlineComps.count -gt 1 ) {
+			if ( $DataArchive.GetType().BaseType.name -eq 'Array' -and
+				 $DataArchive.count -gt 0 -and
+				 $OnlineComps.count -gt 1 ) {
 
 				foreach ( $comp in $OnlineComps) {
 					:OutOfNestedForEach_LABEL
@@ -1234,6 +1236,8 @@ PROCESS {
 		try {
 			Write-msg -log -text "[EventLog]:got:[$($RemoteComputers.count)]"
 			
+			$RemoteComputers = $RemoteComputers | ForEach-Object { $_.tolower() }
+
 			if ( $PSCmdlet.ParameterSetName -like "InPathEventLog" ) {
 
 				$paramGetEvent = @{
@@ -1253,7 +1257,9 @@ PROCESS {
 			$paramShowEvent = @{
 				InputObject = $result
 				OutPath     = $OutPath
-				Named       = $true
+			}
+			if ($PSCmdlet.ParameterSetName -like "Name") {
+				$paramShowEvent.Add('Named', $true)
 			}
 			if ($OutPath) {
 				$paramShowEvent.Add('InPathFileName', "$((Resolve-Path $InPath).Path)")
