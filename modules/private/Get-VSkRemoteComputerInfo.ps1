@@ -1,5 +1,5 @@
 #Requires -Version 5.1
-Function Invoke-VSkRemoteComputerInfo {
+Function Get-VSkRemoteComputerInfo {
     param (
         [string]$Computer
     )
@@ -64,7 +64,7 @@ Function Invoke-VSkRemoteComputerInfo {
         $ObjectReturn.msgCatchErr.Add("[msgCatchErr] $_")
     }
     if ( $RemoteSession.count -gt 0 ) {
-        Remove-PSSession -Session $RemoteSession
+        $null = Remove-PSSession -Session $RemoteSession
     }
     $ObjectReturn
 }#endblock

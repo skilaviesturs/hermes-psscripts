@@ -512,7 +512,7 @@ param (
 	[switch]$Help = $False
 )
 BEGIN {
-	$UpdateDir = "\\beluga\install\Scripts\ExpoRemoteJobs"
+	# $UpdateDir = "\\beluga\install\Scripts\ExpoRemoteJobs"
 	#$PsBoundParameters
 	<# ---------------------------------------------------------------------------------------------------------
 		Zemāk veicam izmaiņas, ja patiešām saprotam, ko darām.
@@ -527,27 +527,27 @@ BEGIN {
 	$ReportPath = "$__ScriptPath\result"
 	$Script:DataDir = "$__ScriptPath\data"
 	$BackupDir = "$Script:DataDir\backup"
-	$ModuleDir = "$__ScriptPath\modules"
+	# $ModuleDir = "$__ScriptPath\modules"
 	$LogFileDir = "$__ScriptPath\log"
 	# ielādējam moduļus
 	Get-PSSession | Remove-PSSession
 	Remove-Module -Name WindowsUpdate -ErrorAction SilentlyContinue
 	Import-Module -Name ".\WindowsUpdate.psm1"
 	#Helper scriptu bibliotēkas
-	$CompUpdateFileName = "Set-CompUpdate.ps1"
-	$CompProgramFileName = "Set-CompProgram.ps1"
+	# $CompUpdateFileName = "Set-CompUpdate.ps1"
+	# $CompProgramFileName = "Set-CompProgram.ps1"
 	# $CompAssetFileName = "Get-CompAsset.ps1"
 	# $CompSoftwareFileName	= "Get-CompSoftware.ps1"
-	$CompEventsFileName = "Get-CompEvents.ps1"
-	$CompTestOnlineFileName	= "Get-CompTestOnline.ps1"
-	$CompWakeOnLanFileName	= "Invoke-CompWakeOnLan.ps1"
-	$WinUpdFile = "$ModuleDir\$CompUpdateFileName"
-	$CompProgramFile = "$ModuleDir\$CompProgramFileName"
+	# $CompEventsFileName = "Get-CompEvents.ps1"
+	# $CompTestOnlineFileName	= "Get-CompTestOnline.ps1"
+	# $CompWakeOnLanFileName	= "Invoke-CompWakeOnLan.ps1"
+	# $WinUpdFile = "$ModuleDir\$CompUpdateFileName"
+	# $CompProgramFile = "$ModuleDir\$CompProgramFileName"
 	# $CompAssetFile	= "$ModuleDir\$CompAssetFileName"
 	# $CompSoftwareFile = "$ModuleDir\$CompSoftwareFileName"
-	$CompEventsFile = "$ModuleDir\$CompEventsFileName"
-	$CompTestOnlineFile	= "$ModuleDir\$CompTestOnlineFileName"
-	$CompWakeOnLanFile	= "$ModuleDir\$CompWakeOnLanFileName"
+	# $CompEventsFile = "$ModuleDir\$CompEventsFileName"
+	# $CompTestOnlineFile	= "$ModuleDir\$CompTestOnlineFileName"
+	# $CompWakeOnLanFile	= "$ModuleDir\$CompWakeOnLanFileName"
 	#Žurnalēšanai
 	$PSDefaultParameterValues['out-file:width'] = 500
 	$Script:LogFile = "$LogFileDir\$__ScriptName-$(Get-Date -Format "yyyyMMdd")"
@@ -607,39 +607,39 @@ BEGIN {
 			else {"none"})]"
 			
 	#Scripts pārbauda vai nav jaunākas versijas repozitorijā 
-	if ( Test-Path -Path $UpdateDir ) {
-		Get-ScriptFileUpdate $__ScriptName $__ScriptPath $UpdateDir
-		Get-ScriptFileUpdate $CompUpdateFileName $__ScriptPath $UpdateDir
-		Get-ScriptFileUpdate $CompProgramFileName $__ScriptPath $UpdateDir
-		# Get-ScriptFileUpdate $CompAssetFileName $__ScriptPath $UpdateDir
-		# Get-ScriptFileUpdate $CompSoftwareFileName $__ScriptPath $UpdateDir
-		Get-ScriptFileUpdate $CompEventsFileName $__ScriptPath $UpdateDir
-		Get-ScriptFileUpdate $CompTestOnlineFileName $__ScriptPath $UpdateDir
-		Get-ScriptFileUpdate $CompWakeOnLanFileName $__ScriptPath $UpdateDir
-		if ($ScriptUpdate) {
-			Stop-Watch -Timer $scriptWatch -Name Script
-			exit 
-		}#endif
-	}#endif
-	else {
-		if ($ScriptUpdate) {
-			Write-msg -log -text "[Update] directory [$($UpdateDir)] not available."
-			Stop-Watch -Timer $scriptWatch -Name Script
-			exit 
-		}#endif
-	}#endif
+	# if ( Test-Path -Path $UpdateDir ) {
+	# 	Get-ScriptFileUpdate $__ScriptName $__ScriptPath $UpdateDir
+	# 	Get-ScriptFileUpdate $CompUpdateFileName $__ScriptPath $UpdateDir
+	# 	Get-ScriptFileUpdate $CompProgramFileName $__ScriptPath $UpdateDir
+	# 	# Get-ScriptFileUpdate $CompAssetFileName $__ScriptPath $UpdateDir
+	# 	# Get-ScriptFileUpdate $CompSoftwareFileName $__ScriptPath $UpdateDir
+	# 	# Get-ScriptFileUpdate $CompEventsFileName $__ScriptPath $UpdateDir
+	# 	# Get-ScriptFileUpdate $CompTestOnlineFileName $__ScriptPath $UpdateDir
+	# 	# Get-ScriptFileUpdate $CompWakeOnLanFileName $__ScriptPath $UpdateDir
+	# 	if ($ScriptUpdate) {
+	# 		Stop-Watch -Timer $scriptWatch -Name Script
+	# 		exit 
+	# 	}#endif
+	# }#endif
+	# else {
+	# 	if ($ScriptUpdate) {
+	# 		Write-msg -log -text "[Update] directory [$($UpdateDir)] not available."
+	# 		Stop-Watch -Timer $scriptWatch -Name Script
+	# 		exit 
+	# 	}#endif
+	# }#endif
 	
-	#Check for script helper files; if not aviable - exit
-	if ( -not ( Test-Path -Path $WinUpdFile -PathType Leaf )) {
-		Write-msg -log -bug -text "File [$WinUpdFile] not found. Exit."
-		Stop-Watch -Timer $scriptWatch -Name Script
-		Exit
-	}#endif
-	if ( -not ( Test-Path -Path $CompTestOnlineFile -PathType Leaf )) {
-		Write-msg -log -bug -text "File [$CompTestOnlineFile] not found. Exit."
-		Stop-Watch -Timer $scriptWatch -Name Script
-		Exit
-	}#endif
+	# #Check for script helper files; if not aviable - exit
+	# if ( -not ( Test-Path -Path $WinUpdFile -PathType Leaf )) {
+	# 	Write-msg -log -bug -text "File [$WinUpdFile] not found. Exit."
+	# 	Stop-Watch -Timer $scriptWatch -Name Script
+	# 	Exit
+	# }#endif
+	# if ( -not ( Test-Path -Path $CompTestOnlineFile -PathType Leaf )) {
+	# 	Write-msg -log -bug -text "File [$CompTestOnlineFile] not found. Exit."
+	# 	Stop-Watch -Timer $scriptWatch -Name Script
+	# 	Exit
+	# }#endif
 	
 	<# ---------------------------------------------------------------------------------------------------------
 	pārbaudām katras datortehnikas gatavību strādāt PSRemote režīmā, vai ir nepieciešamās bilbiotēkas
@@ -662,7 +662,12 @@ BEGIN {
 	elseif ( $PSCmdlet.ParameterSetName -like "InPath*" -or
 		$PSCmdlet.ParameterSetName -eq "RebootInPath" -or 
 		$PSCmdlet.ParameterSetName -eq "StopInPath" ) {
-		$InComputers = @(Get-Content $InPath | Where-Object { $_ -ne "" } | Where-Object { -not $_.StartsWith('#') }  | ForEach-Object { $_.ToLower() } | Sort-Object | Get-Unique )
+		
+		
+		$InComputers = @(Get-Content $InPath | 
+		Where-Object { $_ -ne "" } | Where-Object { -not $_.StartsWith('#') }  |
+		ForEach-Object { $_.ToLower() } | Sort-Object | Get-Unique )
+
 		# $ArgumentListOnline = "`-Inpath $InPath"
 		$paramCompTestOnline.Add('Inpath', $InPath)
 	}#endelseif
@@ -1101,9 +1106,9 @@ PROCESS {
 				}#endelseif
 				else {
 					Write-msg -log -text "Sending instructions to [$($CompSession.count)] $(if ( $RemoteComputers.count -gt 1 ) {"computers"} else {"computer"} )"
-					
+
 					# Run Windows install script on to each computer
-					$JobResults = Send-VSkJob -Computers $RemoteComputers -ScriptBlockName 'SBWindowsUpdate'
+					$JobResults = Send-VSkJob -Computers $RemoteComputers -ScriptBlockName 'Set-CompWindowsUpdate'
 					#$JobResults
 					Write-Host "=================================================================================================" -ForegroundColor Yellow
 					# Collect remote logs

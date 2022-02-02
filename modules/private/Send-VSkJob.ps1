@@ -1,5 +1,6 @@
 #Requires -Version 5.1
 Function Send-VSkJob {
+    [CmdletBinding()]
     Param(
         [Parameter(Position = 0, Mandatory)]
         [string[]]$Computers,
@@ -8,17 +9,7 @@ Function Send-VSkJob {
         [Parameter(Position = 2)]
         [string]$Argument1
     )
-    $MaxJobsThreads = 30
-    <# ---------------------------------------------------------------------------------------------------------
-    # SBWindowsUpdate: izsaucam Windows update uz attālinātās darbstacijas
-    ---------------------------------------------------------------------------------------------------------#>
-    # $SBWindowsUpdate = {
-    #     $Computer = $args[0]
-    #     $WinUpdFile = $args[1]
-    #     $Update = $args[2]
-    #     $AutoReboot = $args[3]
-    #     Invoke-Command -ComputerName $Computer -FilePath $WinUpdFile -ArgumentList ($Update, $AutoReboot)
-    # }#endblock
+    $MaxJobsThreads = 25
 
     <# ---------------------------------------------------------------------------------------------------------
     # SBInstall: izsaucam programmas uzstādīšanas procesu
@@ -54,6 +45,20 @@ Function Send-VSkJob {
         Invoke-Expression "& `"$CompWakeOnLanFile`" `-ComputerName $Computer `-DataArchiveFile `"$DataArchiveFile`" `-CompTestOnline `"$CompTestOnlineFile`" "
     }#endblock
     <# ---------------------------------------------------------------------------------------------------------
+    # SBWakeOnLan: izsaucam programmas noņemšanas procesu
+    # Invoke-CompWakeOnLan.ps1 [-ComputerName] <string[]> [-DataArchiveFile] <FileInfo> [-CompTestOnline] <FileInfo> [<CommonParameters>]
+    ---------------------------------------------------------------------------------------------------------#>
+    $SetCompWindowsUpdate = {
+        $Computer = $args[0]
+        $Update = $args[1]
+        $AutoReboot = $args[2]
+        $LocalFunction =  $args[3]
+        Invoke-Command -ComputerName $Computer -Scriptblock {
+            param($update, $autoReboot, $localFunction)
+            [ScriptBlock]::Create($localFunction).Invoke($update,$autoReboot)
+        } -ArgumentList $Update, $AutoReboot, $LocalFunction
+    }#endblock
+    <# ---------------------------------------------------------------------------------------------------------
         [JOBers] kods
     --------------------------------------------------------------------------------------------------------- #>
     $jobWatch = [System.Diagnostics.Stopwatch]::startNew()
@@ -61,18 +66,17 @@ Function Send-VSkJob {
     Write-Host -NoNewLine "[Set-VSkJobs] Running jobs : " -ForegroundColor Yellow -BackgroundColor Black
 
     ForEach ( $Computer in $Computers ) {
-        While ($(Get-Job -state running).count -ge $MaxJobsThreads) {
+        While ($(Get-Job -State "Running").count -ge $MaxJobsThreads) {
             Start-Sleep -Milliseconds 10
         }
         
-        if ( $ScriptBlockName -eq 'SBVerifyComps' ) { 
-            Write-Host "[JOBers] Invoke-VSkRemoteComputerInfo..."
-            $null = Start-Job -Name "$($Computer)" -Scriptblock ${Function:Invoke-VSkRemoteComputerInfo} -ArgumentList $Computer 
+        if ( $ScriptBlockName -eq 'Get-VSkRemoteComputerInfo' ) { 
+            Write-Host "[JOBers] Get-VSkRemoteComputerInfo..."
+            $null = Start-Job -Name "$($Computer)" -Scriptblock ${Function:Get-VSkRemoteComputerInfo} -ArgumentList $Computer 
             
         }
-        if ( $ScriptBlockName -eq 'SBWindowsUpdate' ) { 
-            # $null = Start-Job -Name "$($Computer)" -Scriptblock $SBWindowsUpdate -ArgumentList $Computer, $WinUpdFile, $Update, $AutoReboot 
-            $null = Start-Job -Name "$($Computer)" -Scriptblock ${Function:Set-CompUpdate} -ArgumentList $Update, $AutoReboot 
+        if ( $ScriptBlockName -eq 'Set-CompWindowsUpdate' ) { 
+            $null = Start-Job -Scriptblock $SetCompWindowsUpdate -ArgumentList $Computer, $Update, $AutoReboot, ${Function:Set-CompWindowsUpdate}
         }
         if ( $ScriptBlockName -eq 'SBInstall' ) { 
             Write-Verbose "[StartJob] Start-Job -Scriptblock $SBInstall -ArgumentList $Computer, $CompProgramFile"
@@ -96,17 +100,15 @@ Function Send-VSkJob {
 
     #Get information from each job.
     foreach ( $job in Get-Job ) {
-        $Output = @(
-            Receive-Job -Id ($job.Id)
-        )
+        $Output += @(Receive-Job -Id ($job.Id))
     }
-    Stop-Watch -Timer $jobWatch -Name JOBers
+    $null = Stop-Watch -Timer $jobWatch -Name JOBers
     Get-Job | Remove-Job
 
     if ( $Output.Count -gt 0 ) {
-        Return $Output
+        $Output
     }
     else {
-        Return $False
+        $False
     }
 }

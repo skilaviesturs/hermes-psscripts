@@ -1,5 +1,6 @@
 #Requires -Version 5.1
 Function Test-VSkRemoteComputer {
+    [CmdletBinding()]
     Param(
         [Parameter(Position = 0, Mandatory)]
         [string[]]$ComputerName
@@ -7,38 +8,52 @@ Function Test-VSkRemoteComputer {
     
     # $VerifyCompsResultFile = "$($Script:DataDir)\VerifyCompsResult.dat"
         
-    Write-Host "[Test-VSkRemoteComputer] got for testing [$($ComputerName.Count)] $(
+    Write-Host "[Get-VSkRemoteComputerInfo] got for testing [$($ComputerName.Count)] $(
         if($ComputerName.Count -eq 1){"computer"}else{"computers"}
     )"
-    Write-Verbose "[Test-VSkRemoteComputer]:got:[$($ComputerName)]"
+    Write-Verbose "[Get-VSkRemoteComputerInfo]:got:[$($ComputerName)]"
 
     # nosūtam uzdevumu uz remote datoriem
 
-    $JobResults = Send-VSkJob -Computers $ComputerName -ScriptBlockName 'SBVerifyComps'
+    $JobResults = [System.Collections.ArrayList]@(
+        ( Send-VSkJob -Computers $ComputerName -ScriptBlockName 'Get-VSkRemoteComputerInfo' )
+    )
 
+    <# for test
+    Write-Host "[1]JobResults.Computer.Count [$($JobResults.Computer.Count)]"
+    Write-Host "JobsResult type[$($JobResults.GetType().BaseType.name)]"
     $JobResults | ForEach-Object {
-        Write-Host "$_"
-        foreach ( $line in $_.msgCatchErr ) {
-            Write-Host "$line"
+        if ($null -ne $_.computer) {
+            Write-Host "[$($_.computer)]"
+            Write-Host "[$($_)]"
+            $i = 1
+            $_.msgCatchErr | ForEach-Object {
+                Write-Host "[$i] $_"
+                $i++
+            }
         }
-
     }
+    #  #>
 
     Write-Verbose "[Test-VSkRemoteComputer] got results..."
     # Analizējam saņemtos rezultātus
 
-    $JobResults = $JobResults | Where-Object -Property Computer -ne $null
+    # $JobResults = $JobResults | Where-Object -Property Computer -ne $null
+    # Write-Host "[2]JobResults.Computer.Count [$($JobResults.Computer.Count)]"
 
     if ( $JobResults -ne $False -or
         $JobResults -notlike 'False' -or 
-        $JobResults.Count -gt 0 ) {
+        $JobResults.Computer.Count -gt 0 ) {
 
         #Analizējam JObbu atgrieztos rezultātus, ievietojam DelComps
         $DelComps = @(
             Foreach ($computer in $JobResults) {
+                if ($null -eq $computer.Computer) {
+                    Continue
+                }
                 if ( $computer.msgCatchErr.Count -gt 0 ) {
                     $computer.msgCatchErr | ForEach-Object {
-                        Write-Host "$_"
+                        # Write-Host "$_"
                         Write-msg -log -bug -text "$_" 
                     }
                     $computer.Computer
@@ -86,13 +101,13 @@ Function Test-VSkRemoteComputer {
     else {
         Write-msg -log -bug -text "[Test-VSkRemoteComputer] Oopps!! Jober returned nothing." 
     }
-    if ( $JobResults.GetType().BaseType.name -eq 'Object' ) {
-        $tmpJobResults = $JobResults.psobject.copy()
-        $JobResults = @()
-        $JobResults += @($tmpJobResults)
-    }
-    if ( $JobResults.count -gt 0) {
-        Write-Verbose "[Test-VSkRemoteComputer]:return:[$($ComputerName)]"
+    # if ( $JobResults.GetType().BaseType.name -eq 'Object' ) {
+    #     $tmpJobResults = $JobResults.psobject.copy()
+    #     $JobResults = @()
+    #     $JobResults += @($tmpJobResults)
+    # }
+    if ( $JobResults.Computer.Count -gt 0) {
+        # Write-Host "[Test-VSkRemoteComputer]:return:[$($ComputerName)]"
         # $JobResults | Export-Clixml -Path $VerifyCompsResultFile -Depth 10 -Force
         $ComputerName
     }
@@ -100,4 +115,3 @@ Function Test-VSkRemoteComputer {
         $false
     }
 }
-#endregion
