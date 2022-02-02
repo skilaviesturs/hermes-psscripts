@@ -532,7 +532,7 @@ BEGIN {
 	# ielādējam moduļus
 	Get-PSSession | Remove-PSSession
 	Remove-Module -Name WindowsUpdate -ErrorAction SilentlyContinue
-	Import-Module -Name ".\WindowsUpdate.psm1"
+	Import-Module -Name ".\modules\WindowsUpdate.psm1"
 	#Helper scriptu bibliotēkas
 	# $CompUpdateFileName = "Set-CompUpdate.ps1"
 	# $CompProgramFileName = "Set-CompProgram.ps1"

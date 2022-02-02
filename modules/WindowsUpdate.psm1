@@ -4,7 +4,7 @@ Get-ChildItem -Path "$PSScriptRoot\modules\private\*.ps1" -Exclude Temporary.ps1
 ForEach-Object {
     . $_.FullName
 }
-Get-ChildItem -Path "$PSScriptRoot\modules\*.ps1" -Exclude Temporary.ps1 |
+Get-ChildItem -Path "$PSScriptRoot\modules\public\*.ps1" -Exclude Temporary.ps1 |
 ForEach-Object {
     . $_.FullName
 }
