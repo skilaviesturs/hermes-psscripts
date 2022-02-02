@@ -556,7 +556,6 @@ BEGIN {
 	$TraceFile = "C:\ExpoSheduledWUjob.log"
 	$DataArchiveFile = "$($Script:DataDir)\DataArchive.dat"
 	#$ComputerName = ( -not [string]::IsNullOrEmpty($Name) )
-	$ScriptRandomID	= Get-Random -Minimum 100000 -Maximum 999999
 	$ScriptUser = Invoke-Command -ScriptBlock { whoami }
 	$RemoteComputers = @()
 	$Script:MaxJobsThreads	= 40
@@ -976,22 +975,14 @@ PROCESS {
 			$CompSession = New-PSSession -ComputerName $RemoteComputers -ErrorAction Stop
 			Write-msg -log -text "[Asset]:got:[$($RemoteComputers.count)] -=> [$($CompSession.count)] $(if ( $RemoteComputers.count -gt 1 ) {"computers"} else {"computer"} )"
 			Write-Host "[Asset]:got:[$($RemoteComputers.count)] -=> [$($CompSession.count)] $(if ( $RemoteComputers.count -gt 1 ) {"computers"} else {"computer"} )"
-			
-			# $__throwMessage = $null
-			# if (-NOT ( Test-Path -Path $CompAssetFile -PathType Leaf )) {
-			# 	throw $__throwMessage = "[Asset] script file [$CompAssetFile] not found. Fatal error."
-			# }#endif
-			# elseif (-NOT ( Test-Path -Path $CompSoftwareFile -PathType Leaf )) {
-			# 	throw $__throwMessage = "[Asset] script file [$CompSoftwareFile] not found. Fatal error."
-			# }
 
 			if ( $PSCmdlet.ParameterSetName -like "NameAsset" ) {
 				if ( $Hardware ) {
-					Write-Host "`n[Computer]====================================================================================================" -ForegroundColor Yellow
-
+					
 					# $result = Invoke-Command -Session $CompSession -FilePath $CompAssetFile -ArgumentList ($true)
-					$result = Invoke-Command -Session $CompSession -ScriptBlock ${Function:Get-CompHardware} -ArgumentList ($true)
-
+					$result = Invoke-Command -Session $CompSession -ScriptBlock ${Function:Get-CompHardware} -ArgumentList $Hardware
+					
+					Write-Host "`n[Computer]====================================================================================================" -ForegroundColor Yellow
 					$result | Format-List | Out-String -Stream | Where-Object { $_ -ne "" } |
 					ForEach-Object { Write-Verbose "$_" }
 				}#endif
@@ -1015,16 +1006,23 @@ PROCESS {
 				Write-Host "--------------------------------------------------------------------------------------------------------------" -ForegroundColor Yellow
 			}#endif
 			if ($PSCmdlet.ParameterSetName -like "InPathAsset" ) {
+
 				Write-Host "`n[Software]====================================================================================================" -ForegroundColor Yellow
-				$result = Invoke-Command -Session $CompSession -ScriptBlock ${Function:Get-CompSoftware} -ArgumentList ($Include, $Exclude) `
-				| Sort-Object -Property PSComputerName, DisplayName `
-				| Select-Object PSComputerName, @{name = 'Name'; expression = { $_.DisplayName } }, @{name = 'Version'; expression = { $_.DisplayVersion } }, Scope, IdentifyingNumber, @{name = 'Arch'; expression = { $_.Architecture } } -Unique
+				
+				$result = Invoke-Command -Session $CompSession -ScriptBlock ${Function:Get-CompSoftware} -ArgumentList ($Include, $Exclude) | 
+				Sort-Object -Property PSComputerName, DisplayName |
+				Select-Object PSComputerName, 
+				@{name = 'Name'; expression = { $_.DisplayName } }, 
+				@{name = 'Version'; expression = { $_.DisplayVersion } }, 
+				Scope, IdentifyingNumber, 
+				@{name = 'Arch'; expression = { $_.Architecture } } -Unique
+
 				if ($result) {
 					$result	| Format-Table PSComputerName, Name, Version, IdentifyingNumber, Scope, Arch -AutoSize
-				}#endif
+				}
 				else {
 					Write-Host "Got nothing to show." -ForegroundColor Green
-				}#endelse
+				}
 				Write-Host "--------------------------------------------------------------------------------------------------------------" -ForegroundColor Yellow
 				<#
 				if ( $RawData.count -gt 0 ) {
@@ -1044,7 +1042,7 @@ PROCESS {
 				}#endelse
 				#>
 			}#endelse
-		}#endtry
+		}
 		catch {
 			if ($__throwMessage) {
 				Write-msg -log -bug -text "$__throwMessage"
@@ -1118,7 +1116,7 @@ PROCESS {
 				#region CHECK and UPDATE
 				if ($Check -or $Update) {
 					Write-msg -log -text "Sending instructions to [$($CompSession.count)] $(if ( $RemoteComputers.count -gt 1 ) {"computers"} else {"computer"} )"
-					Write-Host "[WindowsUpdate] Update:[$($Update)], AutoReboot[$($AutoReboot)]"
+					# Write-Host "[WindowsUpdate] Update:[$($Update)], AutoReboot[$($AutoReboot)]"
 					# Run Windows install script on to each computer
 					$paramVSkJob = @{
 						Computers       = $RemoteComputers
@@ -1126,9 +1124,6 @@ PROCESS {
 						Update          = $Update
 						AutoReboot      = $AutoReboot
 					}
-
-					# if ($Update) { $paramVSkJob.Add('Update', $True) }
-					# if ($AutoReboot) { $paramVSkJob.Add('AutoReboot', $True) } 
 
 					$JobResults = Send-VSkJob @paramVSkJob
 
@@ -1238,33 +1233,36 @@ PROCESS {
 	if ( ( $RemoteComputers.count -gt 0 ) -and $EventLog ) {
 		try {
 			Write-msg -log -text "[EventLog]:got:[$($RemoteComputers.count)]"
-			#Write-Host "[EventLog]:got:[$($RemoteComputers.count)]"
-
-			$__throwMessage = $null
-			if (-NOT ( Test-Path -Path $CompEventsFile -PathType Leaf )) {
-				throw $__throwMessage = "[EventLog] script file [$CompEventsFile] not found. Fatal error."
-			}
-
+			
 			if ( $PSCmdlet.ParameterSetName -like "InPathEventLog" ) {
-				$tmpFile = "$DataDir\$ScriptRandomID.tmp"
-				$RemoteComputers | Out-File $tmpFile -Force
-				$ArgumentList = "`-InPath $((Resolve-Path $tmpFile).Path) $(if($OutPath) {" `-OutPath `-InPathFileName $((Resolve-Path $InPath).Path) "})$(if($Days){" `-Days $Days "})"
+
+				$paramGetEvent = @{
+					Days   = $Days
+					InPath = $InPath
+				}
+				$result = Get-CompEvent @paramGetEvent
 			}
 			else {
-				$tmpName = $RemoteComputers[0]
-				$ArgumentList = "`-Name $tmpName $(if($Days){" `-Days $Days "})"
+				
+				$paramGetEvent = @{
+					Days = $Days
+				}
+				$result = $RemoteComputers | Get-CompEvent @paramGetEvent
 			}
-			Write-Verbose "[Invoke-Expression] `& $CompEventsFile $ArgumentList "
-			Invoke-Expression "& `"$CompEventsFile`" $ArgumentList "
-			if ( $PSCmdlet.ParameterSetName -like "InPathEventLog" ) { Remove-Item -Path $tmpFile }
+			
+			$paramShowEvent = @{
+				InputObject = $result
+				OutPath     = $OutPath
+				Named       = $true
+			}
+			if ($OutPath) {
+				$paramShowEvent.Add('InPathFileName', "$((Resolve-Path $InPath).Path)")
+			}
+			Show-CompEvent @paramShowEvent
+
 		}
 		catch {
-			if ($__throwMessage) {
-				Write-msg -log -bug -text "$__throwMessage"
-			}
-			else {
-				Write-ErrorMsg -Name 'EventLog' -InputObject $_
-			}
+			Write-ErrorMsg -Name 'EventLog' -InputObject $_
 		}
 	}
 	else {

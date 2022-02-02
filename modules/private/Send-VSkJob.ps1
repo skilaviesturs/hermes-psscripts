@@ -87,7 +87,7 @@ Function Send-VSkJob {
                 Invoke-Command -ComputerName $Computer -Scriptblock {
                     param($Update, $AutoReboot, $ImportedFunction)
 
-                    Write-Host "[Set-CompWindowsUpdate] Update:[$Update], AutoReboot[$AutoReboot]"
+                    # Write-Host "[Set-CompWindowsUpdate] Update:[$Update], AutoReboot[$AutoReboot]"
                     [ScriptBlock]::Create($ImportedFunction).Invoke($Update, $AutoReboot)
 
                 } -ArgumentList $Update, $AutoReboot, $ImportedFunction
