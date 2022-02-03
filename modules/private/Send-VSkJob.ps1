@@ -9,10 +9,19 @@ Function Send-VSkJob {
         [switch]$Update,
         [switch]$AutoReboot,
         [System.IO.FileInfo]$InstallPath,
-        [string]$UninstallEncryptedParameter,
-        [System.IO.FileInfo]$DataArchiveFile
+        [string]$DataArchiveFile,
+        [string]$UninstallEncryptedParameter
     )
+    if (-not $PSBoundParameters.ContainsKey('Verbose')) {
+        $VerbosePreference = $PSCmdlet.GetVariableValue('VerbosePreference')
+    }
     $MaxJobsThreads = 25
+    Write-Verbose "[Send-VSkJob]:ComputerName[$Computers]; ScriptBlockName[$ScriptBlockName]"
+    Write-Verbose "[Send-VSkJob]:Update [$Update]; AutoReboot[$AutoReboot]"
+    Write-Verbose "[Send-VSkJob]:InstallPath [$($InstallPath.FullName)]"
+    Write-Verbose "[Send-VSkJob]:DataArchiveFile [$DataArchiveFile]"
+    Write-Verbose "[Send-VSkJob]:UninstallEncryptedParameter [$UninstallEncryptedParameter]"
+
     $jobWatch = [System.Diagnostics.Stopwatch]::startNew()
     $Output = @()
     Write-Host -NoNewLine "[Set-VSkJobs] Running jobs : " -ForegroundColor Yellow -BackgroundColor Black
@@ -48,7 +57,7 @@ Function Send-VSkJob {
         }
         if ( $ScriptBlockName -eq 'Install' ) { 
             # Install-CompProgram.ps1 -ComputerName EX00001 -InstallPath 'D:\install\7-zip\7z1900-x64.msi'
-            $null = Start-Job -Scriptblock ${Function:Install-CompProgram} -ArgumentList $Computer, $InstallPath
+            $null = Start-Job -Scriptblock ${Function:Install-CompProgram} -ArgumentList $Computer, $InstallPath.FullName
         }
         if ( $ScriptBlockName -eq 'Uninstall' ) { 
             # Uninstall-CompProgram.ps1 -ComputerName EX00001 -CryptedIdNumber 'ASL535LKJAFAFKLKNDG0983095MM36NL3NKLKWEJTBL'

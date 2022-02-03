@@ -200,7 +200,7 @@ function Get-CompHardware {
         if ( $Name ) {
             $OutputObject | Format-List * | Out-String -Stream | 
                 Where-Object { $_ -ne "" } | ForEach-Object { Write-Host "$_" }
-        }#endif
+        }
         <#
         elseif ( $Api) {
             $_host = 'http://localhost:8000'
@@ -229,13 +229,13 @@ function Get-CompHardware {
         }
         #>
         else {
-            return $OutputObject
-        }#endelse
+            $OutputObject
+        }
     
-    }#endOfPROCESS
+    }
     
     END {
         $stopwatch.Stop()
         Write-msg -log -text "[-----] Script finished in $([math]::Round(($stopwatch.Elapsed).TotalSeconds,3)) seconds."
-    }#endOfEND
+    }
 }

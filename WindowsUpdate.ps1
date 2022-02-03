@@ -531,8 +531,8 @@ BEGIN {
 	$LogFileDir = "$__ScriptPath\log"
 	# ielādējam moduļus
 	Get-PSSession | Remove-PSSession
-	Remove-Module -Name WindowsUpdate -ErrorAction SilentlyContinue
-	Import-Module -Name ".\modules\WindowsUpdate.psm1"
+	Remove-Module -Name VSkWinUpdate -ErrorAction SilentlyContinue
+	Import-Module -Name ".\modules\VSkWinUpdate.psm1"
 	#Helper scriptu bibliotēkas
 	# $CompUpdateFileName = "Set-CompUpdate.ps1"
 	# $CompProgramFileName = "Set-CompProgram.ps1"
@@ -978,16 +978,17 @@ PROCESS {
 			Write-msg -log -text "[Asset]:got:[$($RemoteComputers.count)] -=> [$($CompSession.count)] $(if ( $RemoteComputers.count -gt 1 ) {"computers"} else {"computer"} )"
 			Write-Host "[Asset]:got:[$($RemoteComputers.count)] -=> [$($CompSession.count)] $(if ( $RemoteComputers.count -gt 1 ) {"computers"} else {"computer"} )"
 
-			if ( $PSCmdlet.ParameterSetName -like "NameAsset" ) {
+			if ( $PSCmdlet.ParameterSetName -eq "NameAsset" ) {
 				if ( $Hardware ) {
 					
-					# $result = Invoke-Command -Session $CompSession -FilePath $CompAssetFile -ArgumentList ($true)
+					Write-Host "`n[Computer]====================================================================================================" -ForegroundColor Yellow
+
 					$result = Invoke-Command -Session $CompSession -ScriptBlock ${Function:Get-CompHardware} -ArgumentList $Hardware
 					
-					Write-Host "`n[Computer]====================================================================================================" -ForegroundColor Yellow
 					$result | Format-List | Out-String -Stream | Where-Object { $_ -ne "" } |
 					ForEach-Object { Write-Verbose "$_" }
-				}#endif
+
+				}
 				if ( -NOT $NoSoftware ) {
 					Write-Host "`n[Software]====================================================================================================" -ForegroundColor Yellow
 
@@ -999,15 +1000,15 @@ PROCESS {
 
 					if ($result) {
 						$result	| Format-Table Name, Version, IdentifyingNumber, Scope, Arch -AutoSize
-					}#endif
+					}
 					else {
 						Write-Host "Got nothing to show." -ForegroundColor Green
-					}#endelse
+					}
 
-				}#endif
+				}
 				Write-Host "--------------------------------------------------------------------------------------------------------------" -ForegroundColor Yellow
-			}#endif
-			if ($PSCmdlet.ParameterSetName -like "InPathAsset" ) {
+			}
+			if ($PSCmdlet.ParameterSetName -eq "InPathAsset" ) {
 
 				Write-Host "`n[Software]====================================================================================================" -ForegroundColor Yellow
 				
@@ -1043,27 +1044,23 @@ PROCESS {
 					Write-msg -log -bug -text "[Asset] Ups... there's nothing to import to the Excel."
 				}#endelse
 				#>
-			}#endelse
+			}
 		}
 		catch {
-			if ($__throwMessage) {
-				Write-msg -log -bug -text "$__throwMessage"
-			}#endif
-			else {
-				Write-ErrorMsg -Name 'Asset' -InputObject $_
-			}#endelse
-		}#endcatch
+			Write-ErrorMsg -Name 'Asset' -InputObject $_
+		}
 		finally {
 			if ( $CompSession.count -gt 0 ) {
 				Remove-PSSession -Session $CompSession
-			}#endif
-		}#endfinally
-	}#endif
+			}
+		}
+	}
 	else {
 		if ( $PSCmdlet.ParameterSetName -like "*Asset" ) {
 			Write-msg -log -bug -text "[Asset] No computer in list."
-		}#endif
-	}#endelse
+		}
+	}
+
 	#endregion
 
 	<# ---------------------------------------------------------------------------------------------------------
@@ -1305,15 +1302,23 @@ PROCESS {
 				Computers = $RemoteComputers
 			}
 
-			if ( $PSCmdlet.ParameterSetName -eq "Name4Install" -or $PSCmdlet.ParameterSetName -eq "InPath4Install" ) {
+			if ( $PSCmdlet.ParameterSetName -eq "Name4Install" -or
+				$PSCmdlet.ParameterSetName -eq "InPath4Install" ) {
 
 				# Install-CompProgram.ps1 [-ComputerName] <string> [-InstallPath <FileInfo>] [<CommonParameters>]
-				Write-Host "[Installer] waiting for results:"
+				# Write-Host "[Installer] waiting for results:"
+
+				#kriptējam $Install parametru
+				Write-Verbose "[Main] Install.FullName [$($Install.FullName)]"
+				# $secParameter = $Install.FullName | ConvertTo-SecureString -AsPlainText -Force
+				# $EncryptedInstallPath = $secParameter | ConvertFrom-SecureString
+				# Write-Verbose "[Main] EncryptedInstallPath [$EncryptedInstallPath]"
 
 				$parameterVSkJob.Add('ScriptBlockName', 'Install')
-				$parameterVSkJob.Add('InstallPath', $InstallPath)
+				$parameterVSkJob.Add('InstallPath', $Install.FullName)
 			}
-			elseif ( $PSCmdlet.ParameterSetName -eq "Name4Uninstall" -or $PSCmdlet.ParameterSetName -eq "InPath4Uninstall" ) {
+			elseif ( $PSCmdlet.ParameterSetName -eq "Name4Uninstall" -or
+				$PSCmdlet.ParameterSetName -eq "InPath4Uninstall" ) {
 
 				#kriptējam $Uninstall parametru
 				$secParameter = $Uninstall | ConvertTo-SecureString -AsPlainText -Force
@@ -1327,7 +1332,8 @@ PROCESS {
 
 				# $JobResults = Send-VSkJob  $RemoteComputers -ScriptBlockName 'SBUninstall' -UninstallEncryptedParameter $EncryptedParameter
 			}
-			elseif ( $PSCmdlet.ParameterSetName -eq "WakeOnLanName" -or $PSCmdlet.ParameterSetName -eq "WakeOnLanInPath"  ) {
+			elseif ( $PSCmdlet.ParameterSetName -eq "WakeOnLanName" -or
+					$PSCmdlet.ParameterSetName -eq "WakeOnLanInPath"  ) {
 
 				# Invoke-CompWakeOnLan.ps1 [-ComputerName] <string[]> [-DataArchiveFile] <FileInfo> [<CommonParameters>]
 				Write-Host "[Waker] waiting for results:"
