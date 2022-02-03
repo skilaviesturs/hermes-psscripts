@@ -42,7 +42,13 @@ Function Show-CompEvent {
 			} ) ]
 		[System.IO.FileInfo]$InPathFileName
     )
-        
+    
+    if (-not $PSBoundParameters.ContainsKey('Verbose')) {
+        $VerbosePreference = $PSCmdlet.GetVariableValue('VerbosePreference')
+    }
+    Write-Verbose "[Show-CompEvent] ------------------------------------------------------------"
+    Write-Verbose "[Show-CompEvent]:Named:[$($Named)], OutPath:[$OutPath]"
+    Write-Verbose "[Show-CompEvent]:InPathFileName:[$InPathFileName]"
     # $LogFileDir = "log"
     # $LogFile = "$LogFileDir\RemoteJob_$(Get-Date -Format "yyyyMMdd")"
     $Out2File = Get-ChildItem -Path $InPathFileName -Attributes Archive
@@ -190,8 +196,8 @@ Function Show-CompEvent {
     }
     #Avota informācija ekrānā
     if ($Named) {
-        Write-Host "`nFrom computer's event log:"
-        Write-Host "=========================="
+        Write-Host "`nFrom computer's event log:" -ForegroundColor Yellow
+        Write-Host "==========================" -ForegroundColor Yellow
         $InputObject | Sort-Object -Property TimeGenerated -Descending | Select-Object TimeGenerated, EventSource, $statusFriendlyText, KB, Message `
         | Format-Table * -AutoSize  `
         | Out-String -Stream | Where-Object { $_ -ne "" } `
@@ -202,11 +208,11 @@ Function Show-CompEvent {
         }
     }
     #Kopsavilkuma atskaite ekrānā
-    Write-Host "`nSuccessfully installed Windows updates:"
-    Write-Host "======================================="
+    Write-Host "`nSuccessfully installed Windows updates:" -ForegroundColor Yellow
+    Write-Host "=======================================" -ForegroundColor Yellow
     $WindowUpdateList | Format-Table * -AutoSize | Out-String -Stream | Where-Object { $_ -ne "" } | ForEach-Object { Write-Host "$_" } 
-    Write-Host "`nStatuss of updates:"
-    Write-Host "==================="
+    Write-Host "`nStatuss of updates:" -ForegroundColor Yellow
+    Write-Host "===================" -ForegroundColor Yellow
     $OutputTotal | Sort-Object -Property Status | Format-Table Status, Name, Comments -AutoSize | Out-String -Stream | Where-Object { $_ -ne "" } `
     | ForEach-Object { `
             if ($_.Contains('Error')) { Write-Host "$_" -ForegroundColor Red } 

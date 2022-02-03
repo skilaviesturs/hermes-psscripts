@@ -58,29 +58,6 @@ Function Invoke-CompWakeOnLan {
             Write-Host "For more info write <Get-Help $__ScriptName -Examples>"
             Exit
         }
-        Function Stop-Watch {
-            [CmdletBinding()] 
-            param 
-            (
-                [Parameter(Mandatory = $True)]
-                [ValidateNotNullOrEmpty()]
-                [object]$Timer,
-                [Parameter(Mandatory = $True)]
-                [ValidateNotNullOrEmpty()]
-                [string]$Name
-            )
-            $LogObject = @()
-            $Timer.Stop()
-            if ( $Timer.Elapsed.Minutes -le 9 -and $Timer.Elapsed.Minutes -gt 0 ) { $bMin = "0$($Timer.Elapsed.Minutes)" } else { $bMin = "$($Timer.Elapsed.Minutes)" }
-            if ( $Timer.Elapsed.Seconds -le 9 -and $Timer.Elapsed.Seconds -gt 0 ) { $bSec = "0$($Timer.Elapsed.Seconds)" } else { $bSec = "$($Timer.Elapsed.Seconds)" }
-            $LogObject += @( "[$Name] finished in $(
-                if ( [int]$Timer.Elapsed.Hours -gt 0 ) {"$($Timer.Elapsed.Hours)`:$bMin hrs"}
-                elseif ( [int]$Timer.Elapsed.Minutes -gt 0 ) {"$($Timer.Elapsed.Minutes)`:$bSec min"}
-                else { "$($Timer.Elapsed.Seconds)`.$($Timer.Elapsed.Milliseconds) sec" }
-                )"
-            )
-            $LogObject
-        }
     
         if ( Test-Path $DataArchiveFile -PathType Leaf ) {
             try {
@@ -122,7 +99,9 @@ Function Invoke-CompWakeOnLan {
                 }
                 #Atrodam arhīvā datoru, kas atrodas tajā pašā segmentā, lai no tā varētu pamodināt guļošo
                 foreach ( $rec in $DataArchive ) {
-                    if ( $rec.IPAddress -match "$Pattern`*" -and ( $rec.DNSName -notlike $ComputerName -or $rec.PipedName -notlike $ComputerName ) ) {
+                    if ( $rec.IPAddress -match "$Pattern`*" -and (
+                         $rec.DNSName -notlike $ComputerName -or
+                         $rec.PipedName -notlike $ComputerName ) ) {
 
                         # $OnlineRemoteComps = Invoke-Expression "& `"$CompTestOnlineFile`" `-Name $($rec.DNSName) "
                         $OnlineRemoteComps = Invoke-Command -ScriptBlock ${Function:Get-CompTestOnline} -ArgumentList $rec.DNSName

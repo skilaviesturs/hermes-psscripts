@@ -760,8 +760,8 @@ BEGIN {
 			--------------------------------------------------------------------------------------------------------- #>
 			#izlaižam arhīva soli, ja [1] arhīvs nesatur vērtības vai [2] Online ir tikai viens ieraksts
 			if ( $DataArchive.GetType().BaseType.name -eq 'Array' -and
-				 $DataArchive.count -gt 0 -and
-				 $OnlineComps.count -gt 1 ) {
+				$DataArchive.count -gt 0 -and
+				$OnlineComps.count -gt 1 ) {
 
 				foreach ( $comp in $OnlineComps) {
 					:OutOfNestedForEach_LABEL
@@ -1229,42 +1229,54 @@ PROCESS {
 	<# ---------------------------------------------------------------------------------------------------------
 		Izsaucam EventLog skriptu: NameEventLog or InPathEventLog; $CompEventsFileName 	= "lib\Get-CompEvents.ps1"
 		# Get-CompEvents.ps1 [-InPath] <FileInfo> [-OutPath <switch>] [-Days <int>] [<CommonParameters>]
-		# Get-CompEvents.ps1 [-Name] <string> [-Days <int>] [<CommonParameters>]
+		# Get-CompEvents.ps1 [-ComputerName] <string> [-Named <switch>][-Days <int>] [<CommonParameters>]
 	--------------------------------------------------------------------------------------------------------- #>
 	#region  EVENTLOG
 	if ( ( $RemoteComputers.count -gt 0 ) -and $EventLog ) {
 		try {
 			Write-msg -log -text "[EventLog]:got:[$($RemoteComputers.count)]"
 			
+			#region Iegūstam EventLog datus
+
 			$RemoteComputers = $RemoteComputers | ForEach-Object { $_.tolower() }
 
 			if ( $PSCmdlet.ParameterSetName -like "InPathEventLog" ) {
 
 				$paramGetEvent = @{
-					Days   = $Days
 					InPath = $InPath
 				}
-				$result = Get-CompEvent @paramGetEvent
 			}
-			else {
+			if ( $PSCmdlet.ParameterSetName -like "NameEventLog" ) {
 				
 				$paramGetEvent = @{
-					Days = $Days
+					ComputerName = $RemoteComputers
 				}
-				$result = $RemoteComputers | Get-CompEvent @paramGetEvent
 			}
+
+			# iestatam noklusētās 30 dienas, ja nav norādīts savādāk
+			if ( $Days ) { $paramGetEvent.Add('Days', $Days) } else
+			{ $paramGetEvent.Add('Days', 30) }
+			$result = Get-CompEvent @paramGetEvent
 			
+			#endregion
+
+			#region Parādam rezultātu ekrānā
+
 			$paramShowEvent = @{
 				InputObject = $result
 				OutPath     = $OutPath
 			}
-			if ($PSCmdlet.ParameterSetName -like "Name") {
-				$paramShowEvent.Add('Named', $true)
+
+			if ( $PSCmdlet.ParameterSetName -like "NameEventLog" ) {
+				$paramShowEvent.Add('Named', $True)
 			}
+
 			if ($OutPath) {
 				$paramShowEvent.Add('InPathFileName', "$((Resolve-Path $InPath).Path)")
 			}
 			Show-CompEvent @paramShowEvent
+
+			#endregion
 
 		}
 		catch {
@@ -1289,17 +1301,17 @@ PROCESS {
 			Write-msg -log -text "[$(if($Install){"Install"}elseif($Uninstall){"Uninstall"}else{"WakeOnLan"})]:got:[$($RemoteComputers.count)]"
 			Write-Verbose "[$(if($Install){"Install"}elseif($Uninstall){"Uninstall"}else{"WakeOnLan"})]:got:[$($RemoteComputers.count)]"
 			
-				$parameterVSkJob = @{
-					Computers = $RemoteComputers
-				}
+			$parameterVSkJob = @{
+				Computers = $RemoteComputers
+			}
 
 			if ( $PSCmdlet.ParameterSetName -eq "Name4Install" -or $PSCmdlet.ParameterSetName -eq "InPath4Install" ) {
 
 				# Install-CompProgram.ps1 [-ComputerName] <string> [-InstallPath <FileInfo>] [<CommonParameters>]
 				Write-Host "[Installer] waiting for results:"
 
-				$parameterVSkJob.Add('ScriptBlockName','Install')
-				$parameterVSkJob.Add('InstallPath',$InstallPath)
+				$parameterVSkJob.Add('ScriptBlockName', 'Install')
+				$parameterVSkJob.Add('InstallPath', $InstallPath)
 			}
 			elseif ( $PSCmdlet.ParameterSetName -eq "Name4Uninstall" -or $PSCmdlet.ParameterSetName -eq "InPath4Uninstall" ) {
 
@@ -1310,7 +1322,7 @@ PROCESS {
 				# Uninstall-CompProgram.ps1 [-ComputerName] <string> [-CryptedIdNumber <string>] [<CommonParameters>]
 				Write-Host "[Uninstaller] waiting for results:"
 				
-				$parameterVSkJob.Add('ScriptBlockName','Uninstall')
+				$parameterVSkJob.Add('ScriptBlockName', 'Uninstall')
 				$parameterVSkJob.Add('UninstallEncryptedParameter', $EncryptedParameter)
 
 				# $JobResults = Send-VSkJob  $RemoteComputers -ScriptBlockName 'SBUninstall' -UninstallEncryptedParameter $EncryptedParameter
@@ -1320,7 +1332,7 @@ PROCESS {
 				# Invoke-CompWakeOnLan.ps1 [-ComputerName] <string[]> [-DataArchiveFile] <FileInfo> [<CommonParameters>]
 				Write-Host "[Waker] waiting for results:"
 
-				$parameterVSkJob.Add('ScriptBlockName','WakeOnLan')
+				$parameterVSkJob.Add('ScriptBlockName', 'WakeOnLan')
 				$parameterVSkJob.Add('DataArchiveFile', $DataArchiveFile)
 			}
 			

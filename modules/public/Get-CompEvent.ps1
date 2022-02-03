@@ -20,15 +20,15 @@ Function Get-CompEvent {
 	Izvada skripta versiju, iespējamās komandas sintaksi un beidz darbu.
 	
 	.EXAMPLE
-	Get-WinUpdateStatuss.ps1 -Name EX00001
+	Get-CompEvent.ps1 -Name EX00001
 	Pārbauda datora EX00001 notikumu žurnālu. Rāda tikai kopsavilkumu.
 	
 	.EXAMPLE
-	Get-WinUpdateStatuss.ps1 -InPath EX00001 .\computers.txt -Details
+	Get-CompEvent.ps1 -InPath EX00001 .\computers.txt -Details
 	Sagatavo .\computers.txt norādītajiem datoru notikumu žurnāla ierakstus. Parāda detalizētu atskaiti.
 	
 	.EXAMPLE
-	'EX00001' | Get-WinUpdateStatuss.ps1 -Days 7
+	'EX00001' | Get-CompEvent.ps1 -Days 7
 	Pārbauda datora EX00001 notikumu žurnālu par notikumiem pēdējās 7 dienās
 	
 	.NOTES
@@ -42,9 +42,9 @@ Function Get-CompEvent {
 			ParameterSetName = 'Name',
 			HelpMessage = "Name of computer")]
 		[ValidateNotNullOrEmpty()]
-		[string[]]$Name,
+		[string[]]$ComputerName,
 		
-		[Parameter(Position = 0, Mandatory = $true,
+		[Parameter(Position = 0, Mandatory,
 			ParameterSetName = 'InPath',
 			HelpMessage = "Path of txt file with list of computers.")]
 		[ValidateScript( {
@@ -60,15 +60,17 @@ Function Get-CompEvent {
 			} ) ]
 		[System.IO.FileInfo]$InPath,
 
-		[Parameter(Mandatory = $false, ParameterSetName = 'Name')]
-		[Parameter(Mandatory = $false, ParameterSetName = 'InPath')]
 		[int]$Days = 30,
-		[Parameter(Position = 0, Mandatory = $true,
+
+		[Parameter(Position = 0, Mandatory,
 			ParameterSetName = 'Help'
 		)]
 		[switch]$Help
 	)
 	BEGIN {
+		if (-not $PSBoundParameters.ContainsKey('Verbose')) {
+			$VerbosePreference = $PSCmdlet.GetVariableValue('VerbosePreference')
+		}
 		<# ---------------------------------------------------------------------------------------------------------
 		Skritpa konfigurācijas datnes
 		--------------------------------------------------------------------------------------------------------- #>
@@ -82,104 +84,24 @@ Function Get-CompEvent {
 			$text = Get-Command -Name "$__ScriptPath\$__ScriptName" -Syntax
 			$text | ForEach-Object { Write-Host $($_) }
 			Write-Host "For more info write <Get-Help $__ScriptName -Examples>"
-			Exit
+			Break
+			# Exit
 		}
-		Function Write-msg { 
-			[Alias("wrlog")]
-			Param(
-				[Parameter(Mandatory = $true)]
-				[ValidateNotNullOrEmpty()]
-				[string]$text,
-				[switch]$log,
-				[switch]$bug
-			)
-	
-			try {
-				#write-debug "[wrlog] Log path: $log"
-				if ( $bug ) { $flag = 'ERROR' } else { $flag = 'INFO' }
-				$timeStamp = Get-Date -Format "yyyy.MM.dd HH:mm:ss"
-				if ( $log -and $bug ) {
-					Write-Warning "[$flag] $text"	
-					Write-Output "$timeStamp [$ScriptRandomID] [$ScriptUser] [$flag] $text" |
-					Out-File "$LogFile.log" -Append -ErrorAction Stop
-				}
-				elseif ( $log ) {
-					Write-Verbose "[$flag] $text"
-					Write-Output "$timeStamp [$ScriptRandomID] [$ScriptUser] [$flag] $text" |
-					Out-File "$LogFile.log" -Append -ErrorAction Stop
-				}
-				else {
-					Write-Verbose "$flag [$ScriptRandomID] $text"
-				}
-			}
-			catch {
-				Write-Warning "[Write-msg] $($_.Exception.Message)"
-				return
-			}
-		}
-		function Get-PendingUpdates {
-			try {
-				$UpdateResults = @()
-				$updatesession = [activator]::CreateInstance([type]::GetTypeFromProgID("Microsoft.Update.Session", $Computername))
-				$UpdateSearcher = $updatesession.CreateUpdateSearcher()
-				$searchresult = $updatesearcher.Search("IsInstalled=0") # 0 = NotInstalled | 1 = Installed
-				$Script:ThereIsUpdates = $searchresult.Updates.Count
-				if ( $Script:ThereIsUpdates -gt 0 ) {
-					#Updates are waiting to be installed
-					Write-msg -log -text "$Computername | summary | [$Script:ThereIsUpdates] $(
-						if ( $Script:ThereIsUpdates -gt 1 ) {"are"} else {"is"} ) waiting to be installed"   
-					foreach ( $entry in $searchresult.Updates ) {
-						Write-msg -log -text "$Computername | update | KB$($entry.KBArticleIDs) Title:$($entry.Title)"
-						$UpdateResults += @("$Computername | KB$($entry.KBArticleIDs) | Title:$($entry.Title)")
-					}
-				}
-				else {
-					Write-msg -log -text "$Computername | update | updates have not been found"
-					$UpdateResults = "$Computername | update | updates have not been found"
-				}
-			}
-			catch {
-				Write-msg -log -bug -text "[listPendingUpdates] $($_.Exception.Message)"
-			}
-			return $UpdateResults
-		}
+
 		<# ---------------------------------------------------------------------------------------------------------
 		Definējam konstantes
 		--------------------------------------------------------------------------------------------------------- #>
 		# $Out2File = Get-ChildItem -Path $InPathFileName -Attributes Archive
 		# $PathToFile = "$($Out2File.DirectoryName)\$($Out2File.BaseName).log"
-		Write-Verbose "Got parameters to work with: Name[$Name];`nInPath[$InPath];`nOutPath[$OutPath]=>[$(if($OutPath) {"$PathToFile"})];`nDays[$Days]"
-		$MaxThreads = 40
-		$Output = @()
+		$MaxThreads = 25
+		$maxAge = (Get-Date).Date.AddDays(-$Days)
+		Write-Verbose "[Get-CompEvent] ------------------------------------------------------------"
+		Write-Verbose "[Get-CompEvent]:Name[$ComputerName]"
+		Write-Verbose "[Get-CompEvent]:InPath[$InPath]"
+		Write-Verbose "[Get-CompEvent]:Days[$Days], maxAge[$maxAge], MaxThreads[$MaxThreads]"
+		$Output = [System.Collections.ArrayList]@()
 		$NoResults = @()
 		$NameFromPipe = 0
-		$maxAge = (Get-Date).Date.AddDays(-$Days)
-		# $StatusCode_ReturnValue = @{
-		# 	1    = 'Staged   '
-		# 	2    = 'Installed'
-		# 	4    = 'KBRestart'
-		# 	19   = 'Success  '
-		# 	20   = 'Error    '
-		# 	21   = 'WURestart'
-		# 	27   = 'Paused   '
-		# 	43   = 'Started  '
-		# 	44   = 'Download '
-		# 	1074	= 'Rebooted '
-		# 	6005	= 'EventLog '
-		# 	6006	= 'EventLog '
-		# 	6013	= 'Uptime   '
-		# }
-		# $statusFriendlyText = @{
-		# 	Name       = 'Status'
-		# 	Expression = { 
-		# 		if ( $null -eq $_.EventID) {
-		# 			"N/A"
-		# 		}
-		# 		else {
-		# 			$StatusCode_ReturnValue[([int]$_.EventID)]
-		# 		}
-		# 	}
-		# }
 	
 		<# Microsoft-Windows-Servicing: 1, 2, 4
 		# Microsoft-Windows-WindowsUpdateClient: 19, 20, 21, 27, 43,
@@ -187,118 +109,30 @@ Function Get-CompEvent {
 		# Microsoft-Windows-EventLog: 6005, 6006, 6013
 		# #>
 		$listId = @(1, 2, 4, 19, 20, 21, 43, 1074, 6013)
-		$Block = {
-			#$Computer	= $args[0]
-			#$maxAge		= $args[1]
-			#$listID		= $args[2]
-			try {
-				$resultTotal = @()
-				$result = @()
-				try {
-					$result = Invoke-Command -ComputerName $args[0] -ScriptBlock {
-						Param ( $maxAge, $listID )
-						Get-WinEvent -FilterHashtable @{
-							Logname      = 'Setup'
-							ProviderName	= 'Microsoft-Windows-Servicing'
-						} -ErrorAction SilentlyContinue | 
-						Where-Object { $_.id -in $listID } | Where-Object { $_.TimeCreated -gt $maxAge } |
-						Select-Object -Property @{Name = 'TimeGenerated'; Expression = { $_.TimeCreated } },
-						MachineName, Source,
-						@{Name = 'EventID'; Expression = { $_.Id } },
-						@{Name = 'KB'; Expression = { if ( $_.Message -match "(KB\d{7})" ) { $matches[1] } } },
-						Message, @{Name = 'EventSource'; Expression = { 'Setup' } }
-					} -ArgumentList ( $args[1], $args[2] ) -ErrorAction Stop
-					if ( $result.count -gt 0 ) { $resultTotal += @($result); $result = @() }
-				}
-				catch {
-	
-				}
-				try {
-					$result = Invoke-Command -ComputerName $args[0] -ScriptBlock {
-						Param ( $maxAge, $listID )
-						Get-WinEvent -FilterHashtable @{
-							logname      = 'System'
-							ProviderName	= 'Microsoft-Windows-WindowsUpdateClient'
-						} -ErrorAction SilentlyContinue |
-						Where-Object { $_.id -in $listId } | Where-Object { $_.TimeCreated -gt $maxAge } |
-						Select-Object -Property @{Name = 'TimeGenerated'; Expression = { $_.TimeCreated } },
-						MachineName, Source,
-						@{Name = 'EventID'; Expression = { $_.Id } },
-						@{Name = 'KB'; Expression = { if ( $_.Message -match "(KB\d{7})" ) { $matches[1] } } },
-						Message, @{Name = 'EventSource'; Expression = { 'WUClient' } }
-					} -ArgumentList ( $args[1], $args[2] )
-					if ( $result.count -gt 0 ) { $resultTotal += @($result); $result = @() }
-				}
-				catch {
-	
-				}
-				try {
-					$result = Invoke-Command -ComputerName $args[0] -ScriptBlock {
-						Param ( $maxAge, $listID )
-						Get-WinEvent -FilterHashtable @{
-							logname      = 'System'
-							ProviderName	= 'User32'
-						} -ErrorAction SilentlyContinue |
-						Where-Object { $_.id -in $listId } | Where-Object { $_.TimeCreated -gt $maxAge } |
-						Select-Object -Property @{Name = 'TimeGenerated'; Expression = { $_.TimeCreated } },
-						MachineName, Source,
-						@{Name = 'EventID'; Expression = { $_.Id } },
-						@{Name = 'KB'; Expression = { if ( $_.Message -match "(KB\d{7})" ) { $matches[1] } } },
-						Message, @{Name = 'EventSource'; Expression = { 'System' } }
-					} -ArgumentList ( $args[1], $args[2] )
-					if ( $result.count -gt 0 ) { $resultTotal += @($result); $result = @() }
-				}
-				catch {
-	
-				}
-				try {
-					$result = Invoke-Command -ComputerName $args[0] -ScriptBlock {
-						Param ( $maxAge, $listID )
-						Get-WinEvent -FilterHashtable @{
-							logname      = 'System'
-							ProviderName	= 'EventLog'
-						} -ErrorAction SilentlyContinue |
-						Where-Object { $_.id -in $listId } | Where-Object { $_.TimeCreated -gt $maxAge } |
-						Select-Object -Property @{Name = 'TimeGenerated'; Expression = { $_.TimeCreated } },
-						MachineName, Source,
-						@{Name = 'EventID'; Expression = { $_.Id } },
-						@{Name = 'KB'; Expression = { if ( $_.Message -match "(KB\d{7})" ) { $matches[1] } } },
-						Message, @{Name = 'EventSource'; Expression = { 'System' } }
-					} -ArgumentList ( $args[1], $args[2] )
-					if ( $result.count -gt 0 ) { $resultTotal += @($result); $result = @() }
-				}
-				catch {
-	
-				}
-				$resultTotal
-			}
-			catch {
-				Write-Host "`n$_" -ForegroundColor Yellow
-			}
-		}
+
 		<# ---------------------------------------------------------------------------------------------------------
 		Sākam darbu
 		--------------------------------------------------------------------------------------------------------- #>
 		Get-Job | Remove-Job
 		if ($PSCmdlet.ParameterSetName -eq 'InPath') {
-			$Name = Get-Content -Path $InPath | 
+			$Computers = Get-Content -Path $InPath | 
 			Where-Object { $_ -ne "" } | Where-Object { -not $_.StartsWith('#') }  | 
 			Sort-Object | Get-Unique
-		}#endif
+		}
 		$JobWatch = [System.Diagnostics.Stopwatch]::startNew()
-		Write-Host "[Get-CompEvents]:got:[$($Name.Count)]"
-		Write-msg -log -text "[Get-CompEvents]:got:[$($Name.Count)]"
+		Write-Verbose "[Get-CompEvent]:got by InPath:[$($Computers.Count)] computers"
+		# Write-msg -log -text "[Get-CompEvent]:got:[$($Computers.Count)]"
 		Write-Host -NoNewLine "Running jobs : " -ForegroundColor Yellow -BackgroundColor Black
 	}
 	
 	PROCESS {
 		if ($PSCmdlet.ParameterSetName -eq 'InPath') {
-			foreach ( $item in $Name ) {
+			foreach ( $Computer in $Computers ) {
 				Write-Host -NoNewLine "." -ForegroundColor Yellow -BackgroundColor Black
 				While ($(Get-Job -state running).count -ge $MaxThreads) {
 					Start-Sleep -Milliseconds 10
 				}
-				$null = Start-Job -Name "$($item)" -Scriptblock $Block -ArgumentList "$($item)", $maxAge, $listID
+				$null = Start-Job -Name "$Computer" -Scriptblock ${Function:Invoke-VSkEventBlock} -ArgumentList $Computer, $maxAge, $listID
 			}
 		}
 		else {
@@ -307,19 +141,18 @@ Function Get-CompEvent {
 			While ($(Get-Job -state running).count -ge $MaxThreads) {
 				Start-Sleep -Milliseconds 10
 			}
-			$null = Start-Job -Name "$($Name)" -Scriptblock $Block -ArgumentList "$($Name)", $maxAge, $listID 
+			$null = Start-Job -Name "$ComputerName" -Scriptblock ${Function:Invoke-VSkEventBlock} -ArgumentList $ComputerName, $maxAge, $listID
 		}
 	}
 	
 	END {
-		#Write-Host -NoNewLine " done." -ForegroundColor Yellow -BackgroundColor Black
+
 		$OutputTotal = @()
-		#Write-Host -NoNewLine "`nRunning      : " -ForegroundColor Yellow -BackgroundColor Black
 		While (Get-Job -State "Running") {
 			Write-Host -NoNewLine "." -ForegroundColor Yellow -BackgroundColor Black
 			Start-Sleep 5
 		}
-		#Get information from each job.
+		#Retrieve information from each job.
 		foreach ( $job in Get-Job ) {
 
 			$result = @( Receive-Job -Id ($job.Id) )
@@ -337,14 +170,14 @@ Function Get-CompEvent {
 				$NoResults += "$($job.Name)"
 			}
 		}
-		#Remove all jobs created.
+
 		Get-Job | Remove-Job
 		Stop-Watch -Timer $JobWatch -Name JOBers
-		Write-Host "`n================================================================================================="
-		Write-Host "Total [$(if( $NameFromPipe -eq 0 ) {"$($name.Count)"}else{"$NameFromPipe"})] computers:"
-		Write-host "Got events from [$(($output.Computer | Get-Unique).Count)] computers and no events from [$($NoResults.Count)] computers."
+		# Write-Host "`n================================================================================================="
+		Write-Verbose "[Get-CompEvent] overall precessed [$(if( $NameFromPipe -eq 0 ) {"$($Computers.Count)"}else{"$NameFromPipe"})] computers:"
+		Write-Verbose "[Get-CompEvent] Got events from [$(($output.Computer | Get-Unique).Count)] computers; no events from [$($NoResults.Count)] computers."
 
-		Stop-Watch -Timer $scriptWatch -Name CompEvents
+		Stop-Watch -Timer $scriptWatch -Name 'Get-CompEvent'
 		
 		$Output
 	}
