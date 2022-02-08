@@ -43,21 +43,8 @@ Function Invoke-CompWakeOnLan {
         --------------------------------------------------------------------------------------------------------- #>
         $CurVersion = "1.1.1"
         $scriptWatch = [System.Diagnostics.Stopwatch]::startNew()
-        $__ScriptName = $MyInvocation.MyCommand
-        $__ScriptPath = Split-Path (Get-Variable MyInvocation -Scope Script).Value.Mycommand.Definition -Parent
-        #Žurnalēšanai
-        #$LogFileDir		= "log"
-        #$LogFile		= "$LogFileDir\RemoteJob_$(Get-Date -Format "yyyyMMdd")"
     
         $LogObject = @()
-    
-        if ($Help) {
-            Write-Host "`nVersion:[$CurVersion]`n"
-            $text = Get-Command -Name "$__ScriptPath\$__ScriptName" -Syntax
-            $text | ForEach-Object { Write-Host $($_) }
-            Write-Host "For more info write <Get-Help $__ScriptName -Examples>"
-            Exit
-        }
     
         if ( Test-Path $DataArchiveFile -PathType Leaf ) {
             try {

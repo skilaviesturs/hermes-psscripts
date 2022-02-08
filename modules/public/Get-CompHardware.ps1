@@ -27,12 +27,7 @@ function Get-CompHardware {
         )
     
     begin {
-        #Clear-Host
-        $CurVersion = "1.1.0"
-        if ( $version ) {
-            Write-Host "`n$CurVersion`n"
-            Exit
-        }#endif
+
         $StopWatch = [System.Diagnostics.Stopwatch]::startNew()
         $Global:LogFile = "C:\ExpoAssets$(Get-Date -Format "yyyyMMdd").log"
         $Computername = $env:COMPUTERNAME

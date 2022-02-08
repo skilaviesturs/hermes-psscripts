@@ -24,11 +24,12 @@ Function Install-CompProgram {
     
     .NOTES
         Author:	Viesturs Skila
-        Version: 1.2.3
+        Version: 1.3.0
     #>
-    [CmdletBinding()]
+    [CmdletBinding(DefaultParameterSetName = 'Install')]
     Param(
         [Parameter(Position = 0, Mandatory,
+            ParameterSetName = 'Install',
             HelpMessage = "Name of computer")]
         [ValidateNotNullOrEmpty()]
         [ValidateScript( {
@@ -41,6 +42,7 @@ Function Install-CompProgram {
         [string]$ComputerName,
     
         [Parameter(Position = 1, Mandatory,
+            ParameterSetName = 'Install',
             HelpMessage = "Path of installer msi or exe file.")]
         [ValidateScript( {
                 if ( -NOT ( $_ | Test-Path -PathType Leaf) ) {
@@ -56,38 +58,26 @@ Function Install-CompProgram {
         [System.IO.FileInfo]$InstallPath,
     
         [Parameter(Position = 0, Mandatory = $False, ParameterSetName = 'Help')]
-        [switch]$Help = $False
+        [switch]$Help
     )
     BEGIN {
         if (-not $PSBoundParameters.ContainsKey('Verbose')) {
             $VerbosePreference = $PSCmdlet.GetVariableValue('VerbosePreference')
         }
-        Write-Host "[Install-CompProgram] ------------------------------------------------------------"
-        Write-Host "[Install-CompProgram]:ComputerName[$ComputerName]"
-        Write-Host "[Install-CompProgram]:InstallPath [$InstallPath]"
+        # Write-Host "[Install-CompProgram] ------------------------------------------------------------"
+        # Write-Host "[Install-CompProgram]:ComputerName[$ComputerName]"
+        # Write-Host "[Install-CompProgram]:InstallPath [$InstallPath]"
+        # Write-Host "[Get-Location]:[$(Get-Location)]"
 
         <# ---------------------------------------------------------------------------------------------------------
         Skritpa konfigurācijas datnes
         --------------------------------------------------------------------------------------------------------- #>
-        $CurVersion = "1.2.3"
-        #$scriptWatch = [System.Diagnostics.Stopwatch]::startNew()
-        $__ScriptName = $MyInvocation.MyCommand
-        $__ScriptPath = Split-Path (Get-Variable MyInvocation -Scope Script).Value.Mycommand.Definition -Parent
-        #$LogFileDir = "log"
-        # $LogMessage = @()
+
         $LogMessage = [System.Collections.ArrayList]@()
         $WorkingDirectory = 'C:\temp'
-
-        if ($Help) {
-            Write-Host "`nVersion:[$CurVersion]`n"
-            $text = Get-Command -Name "$__ScriptPath\$__ScriptName" -Syntax
-            $text | ForEach-Object { Write-Host $($_) }
-            Write-Host "For more info write <Get-Help $__ScriptName -Examples>"
-            Exit
-        }
         
-        # Pārbaudam uz mērķa datora brīvo vietu un izveidojam pagaidu instalācijas mapi, kurā iekopēsim msi
-        $CheckSpace = {
+        # region Pārbaudam uz mērķa datora brīvo vietu un izveidojam pagaidu instalācijas mapi, kurā iekopēsim msi
+        $CheckRemoteSpace = {
             param(
                 [Parameter(Position = 0)]
                 [string]$tempPath,
@@ -121,6 +111,166 @@ Function Install-CompProgram {
     
             #endregion
         }
+
+        #endregion
+
+        $InstallBlock = {
+            param(
+                [Parameter(Position = 0)]
+                [string]$WorkingDirectory,
+                [Parameter(Position = 1)]
+                [string]$FileName
+             )
+        
+            # Write-Host "[InstallBlock] [$WorkingDirectory]\[$FileName]" 
+            $LogMessage = [System.Collections.ArrayList]@()
+            # $LogMessage = @()
+            $LogMessage += @("[InstallBlock] [INFO] got $WorkingDirectory\$FileName")
+        
+            #region sesijas lietotājam iestatam kontroli pār pagaidu direktoriju
+            #$WorkingDirectory = "C:\temp"
+        
+            $packagePath = Get-ChildItem -Path "$WorkingDirectory" -Recurse
+            $Acl = Get-Acl -Path "$WorkingDirectory"
+            $AccessRule = New-Object System.Security.AccessControl.FileSystemAccessRule("$(whoami)", "FullControl", "Allow")
+            $Acl.SetAccessRule($AccessRule)
+            $packagePath | ForEach-Object { Set-Acl -Path $_.FullName -AclObject $Acl }
+        
+            #endregion
+        
+            if ( Test-Path -Path "$WorkingDirectory\$FileName" -Type Leaf  -ErrorAction Stop ) {
+        
+        
+                $Source = Get-ChildItem -Path "$WorkingDirectory\$FileName"
+ 
+                $DataStamp = get-date -Format yyyyMMddTHHmmss
+                $logFile = '{0}-{1}.log' -f "$($Source.DirectoryName)\$($Source.BaseName)", $DataStamp
+        
+                if ( $Source.Extension -eq '.msi' ) {
+        
+                    $MSIArguments = @(
+                        "/i"
+                        ('"{0}"' -f $Source.FullName)
+                        "/qn"
+                        "/norestart"
+                        "AGREETOLICENSE=yes"
+                        "/L*v"
+                        $logFile
+                    )
+                    $object = Start-Process "msiexec.exe" -ArgumentList $MSIArguments -Wait -NoNewWindow -PassThru
+                    $LogMessage += @("[InstallBlock] [INFO] [$($Source.FullName)] log file [$logFile]")
+        
+                    #pārbaudam logfailu uz veiksmīgiem paziņojumiem
+                    $patterns = @(
+                        '-- Installation completed successfully.'
+                        'Reconfiguration success or error status: 0.'
+                        'Installation success or error status: 0.'
+                    )
+                    $patterns | ForEach-Object {
+                        if ( Get-Content $logFile | Select-String -Pattern "$_" ) {
+                            $output = Select-String -Path $logFile -Pattern "$_" -CaseSensitive
+                            $LogMessage += @("[InstallBlock] [SUCCESS] $output")
+                        }
+                    }
+                    $patterns = @(
+                        'Windows Installer requires a system restart.'
+                    )
+                    $patterns | ForEach-Object {
+                        if ( Get-Content $logFile | Select-String -Pattern "$_" ) {
+                            $output = Select-String -Path $logFile -Pattern "$_" -CaseSensitive
+                            $LogMessage += @("[InstallBlock] [WARN] $output")
+                        }
+                    }
+                }
+                elseif ( $Source.Extension -eq '.exe'  ) {
+        
+                    # $logFile = "$(Split-Path -Path "$($Source.FullName)" -Parent)\$($SourceFile.BaseName).log"
+                    $LogMessage += @("[InstallBlock] [INFO] [$($Source.FullName)] log file [$logFile]")
+        
+                    if ( $Source.BaseName -like "AcroRdrDC*"  ) {
+                        $Arguments = "`/c $($Source.FullName) `/sAll `/rs `/msi EULA_ACCEPT=YES `/L`*V $logFile"
+                    }
+                    else {
+                        $Arguments = "`/c $($Source.FullName) `/S `/L`*V $logFile"
+                    }
+
+                    # Write-Host "[InstallBlock] Source.FullName:[$($Source.FullName)] log file [$logFile]"
+                    # Write-Host "[InstallBlock] Log file:[$logFile]"
+                    # # Write-Host "[InstallBlock] [INFO] Source.DirectoryName:[$($(Split-Path -Path "$($Source.FullName)" -Parent))]"
+                    # Write-Host "[InstallBlock] Source.DirectoryName:[$($Source.DirectoryName)]"
+                    # Write-Host "[InstallBlock] Arguments:[$Arguments]"
+                    
+                    $InstallObject = New-object System.Diagnostics.ProcessStartInfo -Property @{
+                        CreateNoWindow         = $true
+                        UseShellExecute        = $false
+                        RedirectStandardOutput = $true
+                        RedirectStandardError  = $true
+                        FileName               = 'cmd.exe'
+                        Arguments              = $Arguments
+                        WorkingDirectory       = $Source.DirectoryName
+                        # WorkingDirectory       = "$(Split-Path -Path "$($Source.FullName)" -Parent)"
+                    }
+                    $process = New-Object System.Diagnostics.Process 
+                    $process.StartInfo = $InstallObject 
+                    $null = $process.Start()
+                    $output = $process.StandardOutput.ReadToEnd()
+                    $outputErr = $process.StandardError.ReadToEnd()
+                    $process.WaitForExit() 
+                    if ( $output ) { $output | Out-File $logFile -Append }
+                    if ( $outputErr ) { $outputErr | Out-File $logFile -Append }
+                    
+                    # Write-Host "[InstallBlock] ExitCode:[$($process.ExitCode)]"
+
+                    if ($process.ExitCode -eq 0) { 
+                        $LogMessage += @("[InstallBlock] [SUCCESS] process successfull")
+                    }
+                    else { 
+                        $LogMessage += @("[InstallBlock] [ERROR] process failed with error code [$($process.ExitCode)]")
+                    }
+        
+                    #pārbaudam logfailu uz veiksmīgiem paziņojumiem
+                    $patterns = @(
+                        '-- Installation completed successfully.'
+                        'Reconfiguration success or error status: 0.'
+                        'Installation success or error status: 0.'
+                    )
+
+                    if ( Test-Path -Path "$logFile" -Type Leaf  -ErrorAction Stop ) {
+
+                        $patterns | ForEach-Object {
+                            if ( Get-Content $logFile | Select-String -Pattern "$_" ) {
+                                $output = Select-String -Path $logFile -Pattern "$_" -CaseSensitive
+                                $LogMessage += @("[InstallBlock] [SUCCESS] $output")
+                            }
+                        }
+                        $patterns = @(
+                            'Windows Installer requires a system restart.'
+                        )
+                        $patterns | ForEach-Object {
+                            if ( Get-Content $logFile | Select-String -Pattern "$_" ) {
+                                $output = Select-String -Path $logFile -Pattern "$_" -CaseSensitive
+                                $LogMessage += @("[InstallBlock] [WARN] $output")
+                            }
+                        }
+                    }
+                }
+                else {
+                    Write-host "[1]: $_ "
+                    $LogMessage += @("[InstallBlock] [ERROR] supports only msi or exe format")
+                }
+            }
+            else {
+                Write-host "[2]: $_ "
+                $LogMessage += @("[InstallBlock] [ERROR] not found [$WorkingDirectory\$FileName]")
+            }
+        
+            # Write-Host "[InstallBlock]:Source.FullName:[$($Source.FullName)]"
+            if ( Test-Path -Path "$($Source.FullName)" -PathType Leaf ) {
+                Remove-Item -Path "$($Source.FullName)" -Force
+            }
+            
+            $LogMessage
+        }
     }
 
     PROCESS {
@@ -134,13 +284,14 @@ Function Install-CompProgram {
 
                     $InstallFile = Get-ChildItem -Path $InstallPath -ErrorAction Stop
 
-                    Write-Host "[Install-CompProgram]:InstallFile.Length [$($InstallFile.Length)]"
+                    Write-Verbose "[Install-CompProgram]:InstallFile.Length [$($InstallFile.Length)]"
+                    # Write-Host "[Install-CompProgram] Invoke-VSkInstallBlock aviable [$(if ( ( Get-Command -Module VSKWinUpdate ).name -like 'Invoke-VSkInstallBlock' ) {"True"} else {"False"})]"
 
                     
                     # padodam: lokālā diska tmp mapi, msi pakotnes izmēru
                     $parametersCheck = @{
                         Session      = $RemoteSession
-                        ScriptBlock  = $CheckSpace
+                        ScriptBlock  = $CheckRemoteSpace
                         ArgumentList = $WorkingDirectory, $InstallFile.Length
                         ErrorAction  = 'Stop'
                     }
@@ -149,10 +300,12 @@ Function Install-CompProgram {
                         $result = Invoke-Command @parametersCheck
                     }
                     catch {
+                        Write-host $_
                         $LogMessage += $_ | Out-String | ForEach-Object { @( "[CheckDiskSize] $_" ) }
                     }
 
-                    Write-Host "[Install-CompProgram]:result:[$result]"
+                    Write-Verbose "[Install-CompProgram]:result:[$result]"
+
                     if ( $result -eq 'Ok' ) {
                         #region Kopējam msi pakotni uz remote datora mapi
                         $parametersCopy = @{
@@ -171,27 +324,27 @@ Function Install-CompProgram {
                         }
                         #endregion
 
-                        Write-Host "[Install-CompProgram]:InstallFile.Name:[$($InstallFile.Name)], WorkingDirectory:[$WorkingDirectory]"
+                        Write-Verbose "[Install-CompProgram]:InstallFile.Name:[$($InstallFile.Name)], WorkingDirectory:[$WorkingDirectory]"
+                        # Write-Host "[Install-CompProgram]:[Invoke-VSkInstallBlock] module is available [$(if ( ( Get-Command -Name 'Invoke-VSkInstallBlock' ).name -like 'Invoke-VSkInstallBlock' ) {"True"} else {"False"})]"
                         # padodam: lokālā diska tmp mapi, msi pakotnes datnes nosaukumu
+
+                        # $FileName = "$($InstallFile.Name)"
+
                         $parametersInstall = @{
                             Session      = $RemoteSession
-                            # ScriptBlock  = ${Function:Invoke-VSkInstallBlock}
-                            # ArgumentList = "$WorkingDirectory", "$($InstallFile.Name)"
+                            ScriptBlock  = $InstallBlock
+                            ArgumentList = $WorkingDirectory, $InstallFile.Name
                             ErrorAction  = 'Stop'
                         }
                         try {
 
-                            $InstallResult = Invoke-Command @parametersInstall -ScriptBlock {
-                                param($Path, $FileName, $ImportedFunction)
-                                
-                                [ScriptBlock]::Create($ImportedFunction).Invoke($Path, $FileName)
-
-                            } -ArgumentList $WorkingDirectory, $InstallFile.Name, ${Function:Invoke-VSkInstallBlock}
+                            $InstallResult = Invoke-Command @parametersInstall
 
                             $InstallResult |  ForEach-Object { $LogMessage += @( "$_") }
                         }
                         catch {
-                            $LogMessage += $_ | Out-String | ForEach-Object { @( "[VSkInstallBlock] $_" ) }
+                            Write-Verbose "[Install-CompProgram] Error: $_"
+                            $LogMessage += $_ | Out-String | ForEach-Object { @( "[Install-CompProgram] $_" ) }
                         }
                     }
                     else {

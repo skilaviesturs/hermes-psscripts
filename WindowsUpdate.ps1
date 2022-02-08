@@ -523,6 +523,7 @@ BEGIN {
 	#Skritpa konfigurācijas datnes
 	$__ScriptName	= $MyInvocation.MyCommand
 	$__ScriptPath	= Split-Path (Get-Variable MyInvocation -Scope Script).Value.Mycommand.Definition -Parent
+	Set-Location -Path $__ScriptPath
 	#Atskaitēm un datu uzkrāšanai
 	$ReportPath = "$__ScriptPath\result"
 	$Script:DataDir = "$__ScriptPath\data"
@@ -532,7 +533,7 @@ BEGIN {
 	# ielādējam moduļus
 	Get-PSSession | Remove-PSSession
 	Remove-Module -Name VSkWinUpdate -ErrorAction SilentlyContinue
-	Import-Module -Name ".\modules\VSkWinUpdate.psm1"
+	Import-Module -Name "$PSScriptRoot\modules\VSkWinUpdate.psm1"
 	#Helper scriptu bibliotēkas
 	# $CompUpdateFileName = "Set-CompUpdate.ps1"
 	# $CompProgramFileName = "Set-CompProgram.ps1"
@@ -1253,6 +1254,7 @@ PROCESS {
 			# iestatam noklusētās 30 dienas, ja nav norādīts savādāk
 			if ( $Days ) { $paramGetEvent.Add('Days', $Days) } else
 			{ $paramGetEvent.Add('Days', 30) }
+
 			$result = Get-CompEvent @paramGetEvent
 			
 			#endregion
@@ -1271,6 +1273,7 @@ PROCESS {
 			if ($OutPath) {
 				$paramShowEvent.Add('InPathFileName', "$((Resolve-Path $InPath).Path)")
 			}
+
 			Show-CompEvent @paramShowEvent
 
 			#endregion
@@ -1306,13 +1309,8 @@ PROCESS {
 				$PSCmdlet.ParameterSetName -eq "InPath4Install" ) {
 
 				# Install-CompProgram.ps1 [-ComputerName] <string> [-InstallPath <FileInfo>] [<CommonParameters>]
-				# Write-Host "[Installer] waiting for results:"
-
-				#kriptējam $Install parametru
+				Write-Host "[Installer] waiting for results:"
 				Write-Verbose "[Main] Install.FullName [$($Install.FullName)]"
-				# $secParameter = $Install.FullName | ConvertTo-SecureString -AsPlainText -Force
-				# $EncryptedInstallPath = $secParameter | ConvertFrom-SecureString
-				# Write-Verbose "[Main] EncryptedInstallPath [$EncryptedInstallPath]"
 
 				$parameterVSkJob.Add('ScriptBlockName', 'Install')
 				$parameterVSkJob.Add('InstallPath', $Install.FullName)
@@ -1326,6 +1324,7 @@ PROCESS {
 
 				# Uninstall-CompProgram.ps1 [-ComputerName] <string> [-CryptedIdNumber <string>] [<CommonParameters>]
 				Write-Host "[Uninstaller] waiting for results:"
+				Write-Verbose "[Main] EncryptedParameter [$EncryptedParameter]"
 				
 				$parameterVSkJob.Add('ScriptBlockName', 'Uninstall')
 				$parameterVSkJob.Add('UninstallEncryptedParameter', $EncryptedParameter)

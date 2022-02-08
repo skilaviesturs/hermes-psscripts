@@ -31,7 +31,7 @@ Function Uninstall-CompProgram {
         Author:	Viesturs Skila
         Version: 1.2.3
     #>
-    [CmdletBinding(DefaultParameterSetName = 'Uninstall')]
+    [CmdletBinding(DefaultParameterSetName = 'UninstallCrypt')]
     Param(
         [Parameter(Position = 0, Mandatory = $True,
             ParameterSetName = 'Uninstall',
@@ -94,27 +94,15 @@ Function Uninstall-CompProgram {
         --------------------------------------------------------------------------------------------------------- #>
         $CurVersion = "1.2.3"
         #$scriptWatch = [System.Diagnostics.Stopwatch]::startNew()
-        $__ScriptName = $MyInvocation.MyCommand
-        $__ScriptPath = Split-Path (Get-Variable MyInvocation -Scope Script).Value.Mycommand.Definition -Parent
-        #$LogFileDir = "log"
-        $LogMessage = @()
 
-        if ($Help) {
-            Write-Host "`nVersion:[$CurVersion]`n"
-            $text = Get-Command -Name "$__ScriptPath\$__ScriptName" -Syntax
-            $text | ForEach-Object { Write-Host $($_) }
-            Write-Host "For more info write <Get-Help $__ScriptName -Examples>"
-            Exit
-        }
+        $LogMessage = @()
         
         # atinstalējam programmatūru uz mērķa datoru
         $Uninstall = {
             [CmdletBinding()]
             param(
                 [Parameter(Position = 0)]
-                [string]$Number,
-                [Parameter(Position = 1)]
-                [string]$__ScriptName
+                [string]$Number
             )
     
             $LogMessage = @()
@@ -214,7 +202,7 @@ Function Uninstall-CompProgram {
                             -Action $action `
                             -Trigger $trigger `
                             -Principal $principal `
-                            -Description "Automated task set by script $__ScriptName" `
+                            -Description "Automated task set by script" `
                             -ErrorAction Stop
     
                         #Papildinām task objekta parametrus
@@ -279,7 +267,7 @@ Function Uninstall-CompProgram {
                         $parameters = @{
                             Session      = $RemoteSession
                             ScriptBlock  = $Uninstall
-                            ArgumentList = ( $UninstallIdNumber, $__ScriptName )
+                            ArgumentList = ( $UninstallIdNumber )
                             ErrorAction  = 'Stop'
                         }
                         $UninstallResult = Invoke-Command @parameters

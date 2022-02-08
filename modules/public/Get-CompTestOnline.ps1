@@ -24,7 +24,7 @@ Function Get-CompTestOnline {
 	
 	.NOTES
 	Author:	Viesturs Skila
-	Version: 1.2.0
+	Version: 1.2.1
 	#>
 	[CmdletBinding(DefaultParameterSetName = 'Name')]
 	param(
@@ -54,24 +54,9 @@ Function Get-CompTestOnline {
 	
 	BEGIN {
 		#Skripta tehniskie mainīgie
-		$CurVersion = "1.2.0"
-		#Skritpa konfigurācijas datnes
-		$__ScriptName	= $MyInvocation.MyCommand
-	
-		$__ScriptPath	= Split-Path (
-			Get-Variable MyInvocation -Scope Script
-		).Value.Mycommand.Definition -Parent
-	
+
 		$Output = @()
 		$LogOutput = @()
-		
-		if ($Help) {
-			Write-Host "`nVersion:[$CurVersion]`n"
-			$text = Get-Command -Name "$__ScriptPath\$__ScriptName" -Syntax
-			$text | ForEach-Object { Write-Host $($_) }
-			Write-Host "For more info write <Get-Help $__ScriptName -Examples>"
-			Exit
-		}#endif
 	
 		Function Stop-Watch {
 			[CmdletBinding()] 
@@ -233,11 +218,11 @@ Function Get-CompTestOnline {
 						}
 					}
 					else {
-						$LogOutput += @("[TestOnline] WinRM service is not accessible on host [$Computers]")
+						$LogOutput += @("[TestOnline] WinRM service is not accessible on host [$_]")
 					}
 				}
 				else {
-					$LogOutput += @("[TestOnline] host [$Computers] is not online")
+					$LogOutput += @("[TestOnline] host [$_] is not online")
 				}
 			}
 		)

@@ -7,7 +7,7 @@ Function Get-CompEvent {
 	.DESCRIPTION
 	Skripts pārbauda datora Eventlog uz Windows Update servisa notikumiem
 	
-	.PARAMETER Name
+	.PARAMETER ComputerName
 	Veic konkrētā datora pārbaudi uz windows jauninājumiem. Rezultātu kopsavilkumu izvada ekrānā. Atbalsta parametru ievadi pipeline.
 	
 	.PARAMETER InPath
@@ -20,7 +20,7 @@ Function Get-CompEvent {
 	Izvada skripta versiju, iespējamās komandas sintaksi un beidz darbu.
 	
 	.EXAMPLE
-	Get-CompEvent.ps1 -Name EX00001
+	Get-CompEvent.ps1 -ComputerName EX00001
 	Pārbauda datora EX00001 notikumu žurnālu. Rāda tikai kopsavilkumu.
 	
 	.EXAMPLE
@@ -74,19 +74,7 @@ Function Get-CompEvent {
 		<# ---------------------------------------------------------------------------------------------------------
 		Skritpa konfigurācijas datnes
 		--------------------------------------------------------------------------------------------------------- #>
-		$CurVersion = "1.2.12"
 		$scriptWatch = [System.Diagnostics.Stopwatch]::startNew()
-		$__ScriptName = $MyInvocation.MyCommand
-		$__ScriptPath = Split-Path (Get-Variable MyInvocation -Scope Script).Value.Mycommand.Definition -Parent
-
-		if ($Help) {
-			Write-Host "`nVersion:[$CurVersion]`n"
-			$text = Get-Command -Name "$__ScriptPath\$__ScriptName" -Syntax
-			$text | ForEach-Object { Write-Host $($_) }
-			Write-Host "For more info write <Get-Help $__ScriptName -Examples>"
-			Break
-			# Exit
-		}
 
 		<# ---------------------------------------------------------------------------------------------------------
 		Definējam konstantes
