@@ -157,25 +157,26 @@ Function Install-CompProgram {
                         "/L*v"
                         $logFile
                     )
-                    $object = Start-Process "msiexec.exe" -ArgumentList $MSIArguments -Wait -NoNewWindow -PassThru
+                    $InstallObject = Start-Process "msiexec.exe" -ArgumentList $MSIArguments -Wait -NoNewWindow -PassThru
                     $LogMessage += @("[InstallBlock] [INFO] [$($Source.FullName)] log file [$logFile]")
         
                     #pārbaudam logfailu uz veiksmīgiem paziņojumiem
-                    $patterns = @(
+                    $patternsSUCC = @(
                         '-- Installation completed successfully.'
                         'Reconfiguration success or error status: 0.'
                         'Installation success or error status: 0.'
                     )
-                    $patterns | ForEach-Object {
+                    $patternsSUCC | ForEach-Object {
                         if ( Get-Content $logFile | Select-String -Pattern "$_" ) {
                             $output = Select-String -Path $logFile -Pattern "$_" -CaseSensitive
                             $LogMessage += @("[InstallBlock] [SUCCESS] $output")
                         }
                     }
-                    $patterns = @(
+                    $patternsWARN = @(
                         'Windows Installer requires a system restart.'
+                        'Installation success or error status: 1603.'
                     )
-                    $patterns | ForEach-Object {
+                    $patternsWARN | ForEach-Object {
                         if ( Get-Content $logFile | Select-String -Pattern "$_" ) {
                             $output = Select-String -Path $logFile -Pattern "$_" -CaseSensitive
                             $LogMessage += @("[InstallBlock] [WARN] $output")
@@ -229,7 +230,7 @@ Function Install-CompProgram {
                     }
         
                     #pārbaudam logfailu uz veiksmīgiem paziņojumiem
-                    $patterns = @(
+                    $patternsSUCC = @(
                         '-- Installation completed successfully.'
                         'Reconfiguration success or error status: 0.'
                         'Installation success or error status: 0.'
@@ -237,16 +238,17 @@ Function Install-CompProgram {
 
                     if ( Test-Path -Path "$logFile" -Type Leaf  -ErrorAction Stop ) {
 
-                        $patterns | ForEach-Object {
+                        $patternsSUCC | ForEach-Object {
                             if ( Get-Content $logFile | Select-String -Pattern "$_" ) {
                                 $output = Select-String -Path $logFile -Pattern "$_" -CaseSensitive
                                 $LogMessage += @("[InstallBlock] [SUCCESS] $output")
                             }
                         }
-                        $patterns = @(
+                        $patternsWARN = @(
                             'Windows Installer requires a system restart.'
+                            'Installation success or error status: 1603.'
                         )
-                        $patterns | ForEach-Object {
+                        $patternsWARN | ForEach-Object {
                             if ( Get-Content $logFile | Select-String -Pattern "$_" ) {
                                 $output = Select-String -Path $logFile -Pattern "$_" -CaseSensitive
                                 $LogMessage += @("[InstallBlock] [WARN] $output")
